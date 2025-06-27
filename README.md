@@ -75,7 +75,8 @@
 - **Device Context** - управление устройствами, их состоянием и конфигурацией
 - **Monitoring Context** - сбор, обработка и хранение телеметрических данных
 - **Control Context** - выполнение команд и управление устройствами
-- **User Context** - управление пользователями, домами и доступами
+- **User Context** - управление пользователями и доступами
+- **House Context** - управление домами и локациями
 - **Integration Context** - взаимодействие с внешними системами и API
 
 ### 4. Проблемы монолитного решения
@@ -106,6 +107,72 @@
 
 В этом задании вам нужно предоставить только диаграммы в модели C4. Мы не просим вас отдельно описывать получившиеся микросервисы и то, как вы определили взаимодействия между компонентами To-Be системы. Если вы правильно подготовите диаграммы C4, они и так это покажут.
 
+### Выбор технологического стека
+
+Учитывая размер команды разработки (5 человек) и необходимость обеспечить эффективную поддержку и развитие системы, было принято стратегическое решение ограничить технологический стек двумя основными языками программирования:
+
+**1. Go** - для высоконагруженных сервисов, требующих высокой производительности:
+- **Device Registry Service** - управление каталогом устройств, частые запросы от всех других сервисов
+- **Device Control Service** - критически важное управление устройствами в реальном времени
+- **Telemetry Service** - обработка больших потоков данных от множества IoT устройств
+
+**2. Java Spring Boot** - для бизнес-сервисов со сложной логикой:
+- **User Management Service** - стандартная бизнес-логика управления пользователями
+- **House Management Service** - управление домами и локациями
+- **Scenario Service** - сложная бизнес-логика автоматизации и правил
+
+**Преимущества такого подхода:**
+- Снижение операционных расходов на CI/CD инфраструктуру
+- Упрощение процессов найма и обучения разработчиков
+- Возможность глубокой экспертизы команды в выбранных технологиях
+- Унификация инструментов мониторинга и отладки
+- Снижение когнитивной нагрузки при переключении между сервисами
+
+### Архитектурные улучшения для отказоустойчивости
+
+Для устранения single points of failure и повышения отказоустойчивости системы применены следующие паттерны:
+
+**1. Local Cache Pattern**
+- Каждый сервис имеет локальный кэш критических данных (permissions, locations, ownership)
+- Кэш инициализируется при старте сервиса и обновляется через события
+- При недоступности основных сервисов используются кэшированные данные
+
+**2. Event-Driven Cache Synchronization**
+- House Management и User Management публикуют события об изменениях
+- Остальные сервисы подписываются на события и обновляют локальные кэши
+- Синхронные вызовы используются только при старте сервиса для начальной загрузки
+
+**3. Graceful Degradation**
+- При недоступности House/User Management сервисы продолжают работать с кэшем
+- Операции логируются для последующей синхронизации
+- Circuit Breaker pattern для автоматического переключения на кэш
+
+**Результат**: Система продолжает функционировать даже при отказе критических сервисов
+
+### Паттерн взаимодействия между сервисами
+
+В архитектуре используется гибридный подход к межсервисному взаимодействию:
+
+**1. API Gateway** - для внешних запросов:
+- Все запросы от пользователей проходят через API Gateway
+- Централизованная аутентификация и rate limiting
+- Единая точка входа для frontend приложений
+
+**2. Service-to-Service** - для внутренних вызовов:
+- Сервисы общаются напрямую друг с другом
+- Снижение latency по сравнению с проксированием через API Gateway
+- Использование service discovery для обнаружения сервисов
+
+**3. Event-Driven** - для синхронизации данных:
+- Асинхронные события через Message Broker (RabbitMQ)
+- Обновление локальных кэшей без прямых вызовов
+- Eventual consistency для некритических данных
+
+**Преимущества гибридного подхода:**
+- Баланс между производительностью и управляемостью
+- Отсутствие единой точки отказа для внутренних вызовов
+- Возможность применения разных политик для внешних и внутренних запросов
+
 **Диаграмма контейнеров (Containers)**
 
 [C4 Container Diagram - Smart Home MVP](https://www.planttext.com?text=bLTDRzj64BthLqnLe941oqA1ddAAR2csKikHBJfjJyQAN4kRa5nYTsbRAFhVExCV94LIjXCWYKWktxnzE_Dc-4aRfaoPfODVH1wdPS9XPqoXFqucYZsVRONPbPjISnNBtF3SdCKocnGfo-cTiJP9AZQJYp_6AxfrlxoUP4mRhl3MmmM-mKJErLb1-8FhwJzVxwE7lnRHrSFr_79-CnkT30P6c9J3nHzGBOUPO5l5CXZ3EaDoS2Kp3lDOwZr2Pp2AvFYSm_BR2gOgtWd3OrCgZbWhhhJCHpjSBvyHwHI6L-7t42_cUGAq5tZUISXOphPSWxOnw1r8-9E8kJw5M75cw5dCSwQ4rC3mrKpcmaYbSJ6YWEAPD3pT3qz2O9Pa8iSuQqTqIfT26yNmBOg_327TSvJqKMnBV2naRYDOShei2gaCmWuSqCFynOpu2ygQipJYMJ4j1Et6tm6wnH45HO3fQa6HLae-YGH3FUD6TWXAwAQnBc66mQDKaChOnjSOhn7EgZ8BUWpTGVXh2h2GKP3hum6mvhb6ZKuX5TkT8IrPXi_mXnDwIy8szdOkopnXQkyYqd5L9rt5FKo0uGdyEm3yKsNCY1NY4d6VsHxVGGd0Nn7JFsM-dTnSBcx-fgkroBUORvZ9QW-55Bav1ILBWxTFWPMeLMw4KmGV80hk8nFq63bJKFlF1uoDUvt93EF3cYih18m-opILpxWOPhCPsAtnnFB4uzFmg6G64TC_uFUJrWwSbdTyI_b2kt1QGxWJWj0UBkMmNe1SMIgHVCODerCzXP0gb0o0E-HRds8Z_uudT3BiPq7NIgPr37-ZoU7YLpYxcKTMXoORcM5T9NJQXiHpHPPnApDdwTY8Z5Ovl540Fae8wmlVnltxq1Wf2hUQT6vami--QvY_58fhcw4NU1Re33RpjQ7ZOccAAZ6DQKgCN56xV7NrC5gw2gS3F4g9QdJPsDRmdegsljEazOKzCLWN5l1SIZCCozkPLYZvA58gDHPZ9kbQeaL2wyp-E27hHWUChgm_zLDQxSqEKs7sdULRcqTsiQOga1cLRV03ImhB6aCV6jLe5UuVfHHyipwrjR_JG-KpTWnlMzFIO4dPAAgqSbGEV0f6YUsMgyf9a1wrYOp47LNuBKw-N1Vv8tgGKQLj5LN5jcXdg3nATgxa3ziybkuQt0qYUCSs6s6MjvQitkVnJiaS1RI9N-RLUV8daXq3SfPrl6E6kRPXcWmZ_0GKDB225JDKmDZ_QZzfUqbByTccvI2pJO-7pCwjx5ARhUBhs-lNRSG1WjaNT107fk8IGhVFlMBXwxf98fIwut374w4RuQrRKBFm_e5yuXtlympYrXEtCWeRi_Q88B3jMVbZMhuu0X5YZh4I1Pv2mnF0RTsRmawGSUnxmf49s4Zjuk-JcDReRdUfQnuFFnDQ-oxSZcNhsmRhr7LVj9-jvxwGeUfirAgqcbeUnkpMRLsi62mHde6RRq99O-3_1eCFO3LSO5uh5jk5WpkUDgUuW_P-h-rOivbaSeFouSEYPs2pIaJHQZsvcwyZZ4IGVZuxW3kSoJgl8Rt6F056DhgzdoNcTfPOqIpXmpJmEzrYMcS1OfGkDS8i6b8Yq3WWtq3jMdxOXdtYEbizsRs1rfazt4zaPd6yDUWmxxqFhXuY_2zTZzTONeckQlqjl9uPu8up1AWUE5Du0wRRau9chCxUJluqyg0wU2ER5jvoPbXecLemHw4jRezDhsaw2V84kU6tsdA3tTBQs-l9vTUxvR29NcdTTTyByj4AszbiPS20dTp8MAOUhQlqeQrweiqPgkchS8tsqSPi5q3bd1xCLe3DiqD_39lziffwf4xIryReiOubF-6uWGTgwJhvS6Xw3f6rZ2sWuTzfYifcUvSRrRVOeXwtCJSY70_AxGvQZTWJEFZ4widojIsJne1glo5lesXo8QUh_WneVxTrAis-JvazxC_FxdVcPsvi3eLFoUhJaUTAn3iwYvvgcTC4D9ufWVzZRJIc8nhxbVj-julqiUHhZsEhSfCAlMjrR3jgsQrDbxT7L3cEr2oCrw1gWTx4KcwfssilP2UJZsFQfPEGpVrmdKnkmwtBZOwLs3ZlygsvYpNuuBhmE0oYhMCx_BgTOgcEyIHLMTZ7rspFrIkkrEWltrWg4jl_l6JyXVfDxZuBsYRUGkjqr1hDZXVDOUfjj6udhU4grTqtsN6qUcklmRMEaYge9sFwedHBusr9mnp_FhntoK2CgrVxS3k9s1u58ZyL1b_5jkdf-idlNQX71uBcjpoH9Sl6D6TfULJQ3lWhwHNMWXrBzKuKxqByoPmuEeBqEiTRrL1HjTYkGNRS-XDsYJ9BuNy0)
@@ -130,7 +197,7 @@
 
 # Задание 3. Разработка ER-диаграммы
 
-Добавьте сюда ER-диаграмму. Она должна отражать ключевые сущности системы, их атрибуты и тип связей между ними.
+Здесь представлена [ERD распределённой системы](link), отражающая ключевые сущности системы, их атрибуты и тип связей между ними.
 
 # Задание 4. Создание и документирование API
 

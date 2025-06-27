@@ -1,0 +1,116 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Container Diagram - Smart Home Ecosystem (MVP with Simplified Redis Caching)
+
+Person(homeowner, "Homeowner", "End user who manages smart home devices, creates scenarios and monitors house remotely")
+Person(admin, "System Administrator", "Manages system configuration and user support")
+
+System_Ext(externalTempApi, "External Temperature API", "Provides weather and temperature data for locations")
+System_Ext(smartDevices, "Smart Devices", "IoT devices: temperature sensors, lights, cameras, smart gates")
+
+System_Boundary(smartHomeEcosystem, "Smart Home Ecosystem") {
+    Container(apiGateway, "API Gateway", "Kong/NGINX", "Single entry point, routing, authentication, rate limiting")
+    
+    ' Core Domain Services (Following DDD Bounded Contexts from Task 1)
+    Container(deviceRegistry, "Device Registry Service", "Go", "Device catalog, metadata, external API integration")
+    Container(deviceControl, "Device Control Service", "Go", "Device commands, state management, real-time control")
+    Container(telemetryService, "Telemetry Service", "Go", "Collect and store all measurements and sensor data")
+    Container(userManagement, "User Management Service", "Java Spring Boot", "User authentication, profiles, access control (User Context)")
+    Container(houseManagement, "House Management Service", "Java Spring Boot", "Houses, rooms, locations, property configuration (House Context)")
+    Container(scenarioService, "Scenario Service", "Java Spring Boot", "Automation rules, scenarios, triggers")
+    
+    ' Infrastructure Services
+    Container(messageBroker, "Message Broker", "RabbitMQ", "Asynchronous communication, event streaming, cache synchronization")
+    
+    ' Simplified Redis Architecture for MVP
+    ContainerDb(deviceControlCache, "Device Control Cache", "Redis", "Device states, command queue, real-time control data")
+    ContainerDb(sharedCache, "Shared Cache", "Redis", "Sessions, permissions, frequently accessed data")
+    
+    ' Databases (Database per Service Pattern - Following Bounded Contexts)
+    ContainerDb(deviceRegistryDb, "Device Registry DB", "PostgreSQL", "Device catalog, metadata, device types, external API configs")
+    ContainerDb(telemetryDb, "Telemetry Database", "InfluxDB", "Time-series measurement data, sensor history")
+    ContainerDb(userDb, "User Management DB", "PostgreSQL", "Users, authentication, profiles, permissions")
+    ContainerDb(houseDb, "House Management DB", "PostgreSQL", "Houses, rooms, locations, property configurations")
+    ContainerDb(scenarioDb, "Scenario Database", "PostgreSQL", "Automation rules, triggers, conditions, user scenarios")
+}
+
+' User Interactions
+Rel(homeowner, apiGateway, "Uses web/mobile app, creates scenarios", "HTTPS/REST")
+Rel(admin, apiGateway, "Manages system", "HTTPS/REST")
+
+' API Gateway to Services (Single Entry Point)
+Rel(apiGateway, userManagement, "Authenticates users, manages profiles", "HTTP/REST")
+Rel(apiGateway, houseManagement, "Manages houses and locations", "HTTP/REST")
+Rel(apiGateway, deviceRegistry, "Registers and catalogs devices", "HTTP/REST")
+Rel(apiGateway, deviceControl, "Controls devices, sends commands", "HTTP/REST")
+Rel(apiGateway, telemetryService, "Reads telemetry data", "HTTP/REST")
+Rel(apiGateway, scenarioService, "Manages automation scenarios", "HTTP/REST")
+
+' Services to their Databases
+Rel(deviceRegistry, deviceRegistryDb, "Stores device catalog & external configs", "SQL/GORM")
+Rel(telemetryService, telemetryDb, "Stores measurements", "InfluxDB Line Protocol")
+Rel(userManagement, userDb, "Stores users and authentication", "SQL/JPA")
+Rel(houseManagement, houseDb, "Stores houses and locations", "SQL/JPA")
+Rel(scenarioService, scenarioDb, "Stores automation rules", "SQL/JPA")
+
+' Redis Cache Access (Simplified)
+Rel(deviceControl, deviceControlCache, "Manages device states", "Redis Protocol")
+Rel(userManagement, sharedCache, "Manages sessions", "Redis Protocol")
+Rel(houseManagement, sharedCache, "Caches hot data", "Redis Protocol")
+Rel(deviceRegistry, sharedCache, "Caches house/location data", "Redis Protocol")
+Rel(telemetryService, sharedCache, "Caches device metadata", "Redis Protocol")
+Rel(scenarioService, sharedCache, "Caches active scenarios", "Redis Protocol")
+
+' External Integrations
+Rel(smartDevices, telemetryService, "Sends sensor data", "MQTT/CoAP")
+Rel(deviceControl, smartDevices, "Sends commands", "MQTT/HTTP")
+Rel(deviceRegistry, externalTempApi, "Fetches weather data for enrichment", "HTTP/REST")
+
+' Event-Driven Communication (Core MVP Events)
+Rel(telemetryService, messageBroker, "Publishes measurement events", "AMQP")
+Rel(deviceControl, messageBroker, "Publishes device state events", "AMQP")
+Rel(deviceRegistry, messageBroker, "Publishes device registration events", "AMQP")
+Rel(houseManagement, messageBroker, "Publishes house/location/access events", "AMQP")
+Rel(userManagement, messageBroker, "Publishes user/permission events", "AMQP")
+Rel(scenarioService, messageBroker, "Subscribes to trigger events", "AMQP")
+
+' Event Subscriptions for Cache Updates
+Rel(messageBroker, deviceRegistry, "House/location change events", "AMQP")
+Rel(messageBroker, deviceControl, "Permission/access change events", "AMQP")
+Rel(messageBroker, telemetryService, "Device/location change events", "AMQP")
+Rel(messageBroker, scenarioService, "Ownership/access change events", "AMQP")
+Rel(messageBroker, userManagement, "User update events", "AMQP")
+Rel(messageBroker, houseManagement, "House update events", "AMQP")
+
+' Service-to-Service Communication (Direct calls between services)
+' Device Registry validation calls
+Rel(deviceControl, deviceRegistry, "Validates device existence", "HTTP/REST")
+Rel(telemetryService, deviceRegistry, "Validates device metadata", "HTTP/REST")
+Rel(scenarioService, deviceRegistry, "Gets device information", "HTTP/REST")
+
+' Scenario automation calls
+Rel(scenarioService, deviceControl, "Triggers automated device actions", "HTTP/REST")
+Rel(scenarioService, telemetryService, "Reads sensor data for rule evaluation", "HTTP/REST")
+
+' Initial Data Loading (Startup Only)
+Rel(deviceRegistry, houseManagement, "Initial cache load", "HTTP/REST", $tags="startup")
+Rel(deviceControl, userManagement, "Initial permissions load", "HTTP/REST", $tags="startup")
+Rel(deviceControl, houseManagement, "Initial access rights load", "HTTP/REST", $tags="startup")
+Rel(telemetryService, houseManagement, "Initial location cache load", "HTTP/REST", $tags="startup")
+Rel(scenarioService, userManagement, "Initial ownership load", "HTTP/REST", $tags="startup")
+Rel(scenarioService, houseManagement, "Initial house access load", "HTTP/REST", $tags="startup")
+Rel(houseManagement, userManagement, "Validates user ownership", "HTTP/REST", $tags="startup")
+
+note bottom
+**Simplified Caching Architecture for MVP:**
+- Device Control Cache: Dedicated Redis for real-time device states
+- Shared Cache: Common Redis for sessions, permissions, hot data
+- Event-driven cache updates via RabbitMQ
+- No over-engineered per-service Redis instances
+- Designed for 5-person development team efficiency
+end note
+
+@enduml 
