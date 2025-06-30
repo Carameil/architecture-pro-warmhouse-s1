@@ -290,58 +290,72 @@
 
 # Задание 5. Работа с docker и docker-compose
 
-Перейдите в apps.
+## Реализованное решение
 
-Там находится приложение-монолит для работы с датчиками температуры. В README.md описано как запустить решение.
+### 1. Temperature API Service
 
-Вам нужно:
+Создан микросервис **temperature-api** на **PHP + Symfony** с следующей функциональностью:
 
-1) сделать простое приложение temperature-api на любом удобном для вас языке программирования, которое при запросе /temperature?location= будет отдавать рандомное значение температуры.
+**Основные endpoints:**
+- `GET /temperature?location=` - возвращает случайную температуру (18-25°C) для указанной локации
+- `GET /temperature/{sensorId}` - возвращает температуру по ID датчика
+- `GET /health` - проверка работоспособности сервиса
 
-Locations - название комнаты, sensorId - идентификатор названия комнаты
+**Mapping локаций и датчиков:**
+- Living Room ↔ Sensor ID 1
+- Bedroom ↔ Sensor ID 2  
+- Kitchen ↔ Sensor ID 3
+- Unknown/Empty ↔ Sensor ID 0
 
+### 2. Архитектура приложения
+
+Применены принципы SOLID с разделением ответственности:
+- **Controllers** - обработка HTTP запросов
+- **Services** - бизнес-логика генерации температуры
+- **DTOs** - передача данных между слоями
+- **Interfaces** - слабая связанность компонентов
+
+### 3. Docker интеграция
+
+**Temperature API:**
+- Dockerfile с оптимизированной сборкой (PHP 8.4 + Nginx)
+- Порт 8081 как требуется в задании
+- Health check для мониторинга состояния
+
+**PostgreSQL для smart_home:**
+- Добавлена БД с автоматической инициализацией через `init.sql`
+- Подключение к Go приложению через переменные окружения
+
+### 4. Интеграция сервисов
+
+Монолитное Go приложение успешно интегрировано с новым temperature-api:
+- HTTP клиент для вызова внешнего API
+- Обогащение данных датчиков актуальными температурными показаниями
+- Обработка ошибок и fallback стратегии
+
+### 5. Тестирование
+
+**Unit тесты** для всех ключевых компонентов:
+- Генератор температуры с проверкой диапазонов
+- Маппер локаций с edge cases
+- HTTP контроллеры с мокированием зависимостей
+- DTO классы на корректность структуры
+
+**Команды для разработки:**
+```bash
+make build        # Сборка всех сервисов
+make up           # Запуск инфраструктуры  
+make test-unit    # Запуск unit тестов
+make clean        # Очистка ресурсов
 ```
-	// If no location is provided, use a default based on sensor ID
-	if location == "" {
-		switch sensorID {
-		case "1":
-			location = "Living Room"
-		case "2":
-			location = "Bedroom"
-		case "3":
-			location = "Kitchen"
-		default:
-			location = "Unknown"
-		}
-	}
 
-	// If no sensor ID is provided, generate one based on location
-	if sensorID == "" {
-		switch location {
-		case "Living Room":
-			sensorID = "1"
-		case "Bedroom":
-			sensorID = "2"
-		case "Kitchen":
-			sensorID = "3"
-		default:
-			sensorID = "0"
-		}
-	}
-```
+### 6. Проверка работоспособности
 
-2) Приложение следует упаковать в Docker и добавить в docker-compose. Порт по умолчанию должен быть 8081
+Используя Postman коллекцию `smarthome-api.postman_collection.json`:
+- **Create Sensor** - создание нового датчика
+- **Get All Sensors** - получение списка с актуальными температурами
 
-3) Кроме того для smart_home приложения требуется база данных - добавьте в docker-compose файл настройки для запуска postgres с указанием скрипта инициализации ./smart_home/init.sql
-
-Для проверки можно использовать Postman коллекцию smarthome-api.postman_collection.json и вызвать:
-
-- Create Sensor
-- Get All Sensors
-
-Должно при каждом вызове отображаться разное значение температуры
-
-Ревьюер будет проверять точно так же.
+Каждый вызов возвращает разные значения температуры в диапазоне 18-25°C, что подтверждает корректную работу интеграции между сервисами.
 
 
 # **Задание 6. Разработка MVP**

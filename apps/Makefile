@@ -146,6 +146,21 @@ test-sensors: ## Test smart home sensors endpoint
 	@echo "${BLUE}Testing sensors API...${NC}"
 	@curl -f http://localhost:8080/api/v1/sensors || echo "${RED}Sensors API not responding${NC}"
 
+.PHONY: test-unit
+test-unit: ## Run PHPUnit tests in temperature-api
+	@echo "${BLUE}Running PHPUnit tests...${NC}"
+	docker-compose exec temperature-api php bin/phpunit
+
+.PHONY: test-unit-verbose
+test-unit-verbose: ## Run PHPUnit tests with verbose output
+	@echo "${BLUE}Running PHPUnit tests with verbose output...${NC}"
+	docker-compose exec temperature-api php bin/phpunit --verbose
+
+.PHONY: test-coverage
+test-coverage: ## Run PHPUnit tests with coverage report
+	@echo "${BLUE}Running PHPUnit tests with coverage...${NC}"
+	docker-compose exec temperature-api php bin/phpunit --coverage-text
+
 # Cleanup commands
 .PHONY: clean
 clean: ## Remove all containers and images
