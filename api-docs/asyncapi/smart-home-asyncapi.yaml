@@ -1,0 +1,332 @@
+asyncapi: 3.0.0
+info:
+  title: Smart Home AsyncAPI
+  version: 1.0.0
+  description: |
+    Asynchronous communication for Smart Home system.
+    **Task requirement**: "AsyncAPI for asynchronous communication"
+    
+    Communication patterns:
+    - MQTT: IoT devices ↔ services  
+    - RabbitMQ: Inter-service events and cache synchronization
+  contact:
+    name: Smart Home Team
+    email: dev@warmhouse.com
+
+servers:
+  mqttBroker:
+    host: localhost:1883
+    protocol: mqtt
+    description: MQTT broker for IoT device communication
+  
+  rabbitmq:
+    host: localhost:5672
+    protocol: amqp
+    description: RabbitMQ for inter-service messaging
+
+defaultContentType: application/json
+
+channels:
+  # MQTT Channels - Device Communication
+  deviceTelemetry:
+    address: 'home/{house_id}/devices/{device_id}/telemetry'
+    messages:
+      telemetryMessage:
+        $ref: '#/components/messages/TelemetryMessage'
+    description: Device telemetry data from sensors
+    parameters:
+      house_id:
+        description: House identifier
+        location: $message.payload#/house_id
+      device_id:
+        description: Device identifier  
+        location: $message.payload#/device_id
+
+  deviceCommands:
+    address: 'home/{house_id}/devices/{device_id}/commands'
+    messages:
+      commandMessage:
+        $ref: '#/components/messages/DeviceCommandMessage'
+    description: Commands sent to devices
+    parameters:
+      house_id:
+        description: House identifier
+        location: $message.payload#/house_id
+      device_id:
+        description: Device identifier
+        location: $message.payload#/device_id
+
+  # RabbitMQ Channels - Inter-service Events
+  deviceEvents:
+    address: 'events.device'
+    messages:
+      deviceRegistered:
+        $ref: '#/components/messages/DeviceRegisteredEvent'
+      deviceStateChanged:
+        $ref: '#/components/messages/DeviceStateChangedEvent'
+    description: Device lifecycle and state events
+
+  cacheEvents:
+    address: 'events.cache'
+    messages:
+      cacheInvalidation:
+        $ref: '#/components/messages/CacheInvalidationEvent'
+    description: Cache synchronization events
+
+operations:
+  # MQTT Operations
+  receiveTelemetry:
+    action: receive
+    channel:
+      $ref: '#/channels/deviceTelemetry'
+    summary: Receive telemetry data from devices
+    description: Telemetry Service receives sensor measurements from IoT devices
+
+  sendCommand:
+    action: send
+    channel:
+      $ref: '#/channels/deviceCommands'
+    summary: Send commands to devices
+    description: Device Control Service sends commands to IoT devices
+
+  # RabbitMQ Operations
+  publishDeviceEvent:
+    action: send
+    channel:
+      $ref: '#/channels/deviceEvents'
+    summary: Publish device events
+    description: Device Registry publishes device lifecycle events
+
+  subscribeCacheEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/cacheEvents'
+    summary: Subscribe to cache events
+    description: Services subscribe to cache invalidation events
+
+components:
+  messages:
+    TelemetryMessage:
+      name: TelemetryMessage
+      title: Device Telemetry Data
+      summary: Sensor measurement data from IoT devices
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - device_id
+          - house_id
+          - location_id
+          - timestamp
+          - measurements
+        properties:
+          device_id:
+            type: string
+            format: uuid
+          house_id:
+            type: string
+            format: uuid
+          location_id:
+            type: string
+            format: uuid
+          timestamp:
+            type: string
+            format: date-time
+          measurements:
+            type: object
+            description: Key-value pairs of sensor measurements
+            additionalProperties:
+              type: number
+          quality:
+            type: string
+            enum: [good, fair, poor, error]
+            default: good
+      examples:
+        - name: temperatureSensor
+          summary: Temperature sensor reading
+          payload:
+            device_id: "550e8400-e29b-41d4-a716-446655440001"
+            house_id: "550e8400-e29b-41d4-a716-446655440020"
+            location_id: "550e8400-e29b-41d4-a716-446655440030"
+            timestamp: "2024-12-20T15:30:00.000Z"
+            measurements:
+              temperature: 23.5
+              humidity: 45.2
+              battery_level: 85
+            quality: "good"
+
+    DeviceCommandMessage:
+      name: DeviceCommandMessage
+      title: Device Command
+      summary: Commands sent to IoT devices
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - command_id
+          - device_id
+          - command
+          - timestamp
+        properties:
+          command_id:
+            type: string
+            format: uuid
+          device_id:
+            type: string
+            format: uuid
+          command:
+            type: string
+            description: Command name
+          parameters:
+            type: object
+            description: Command parameters
+          priority:
+            type: string
+            enum: [low, normal, high, urgent]
+            default: normal
+          timeout:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 30
+          timestamp:
+            type: string
+            format: date-time
+      examples:
+        - name: setTemperature
+          summary: Set thermostat temperature
+          payload:
+            command_id: "cmd_12345678-abcd-4321-efgh-123456789012"
+            device_id: "550e8400-e29b-41d4-a716-446655440001"
+            command: "set_temperature"
+            parameters:
+              target_temperature: 22.0
+              mode: "heat"
+            priority: "normal"
+            timeout: 30
+            timestamp: "2024-12-20T15:30:00.000Z"
+
+    DeviceRegisteredEvent:
+      name: DeviceRegisteredEvent
+      title: Device Registered
+      summary: New device registered in system
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - event_id
+          - event_type
+          - device_id
+          - house_id
+          - timestamp
+        properties:
+          event_id:
+            type: string
+            format: uuid
+          event_type:
+            type: string
+            const: "device.registered"
+          device_id:
+            type: string
+            format: uuid
+          house_id:
+            type: string
+            format: uuid
+          location_id:
+            type: string
+            format: uuid
+          device_type:
+            type: string
+          timestamp:
+            type: string
+            format: date-time
+      examples:
+        - name: newDevice
+          summary: New temperature sensor registered
+          payload:
+            event_id: "evt_12345678-abcd-4321-efgh-123456789012"
+            event_type: "device.registered"
+            device_id: "550e8400-e29b-41d4-a716-446655440001"
+            house_id: "550e8400-e29b-41d4-a716-446655440020"
+            location_id: "550e8400-e29b-41d4-a716-446655440030"
+            device_type: "temperature_sensor"
+            timestamp: "2024-12-20T15:30:00.000Z"
+
+    DeviceStateChangedEvent:
+      name: DeviceStateChangedEvent
+      title: Device State Changed
+      summary: Device state or properties changed
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - event_id
+          - event_type
+          - device_id
+          - timestamp
+        properties:
+          event_id:
+            type: string
+            format: uuid
+          event_type:
+            type: string
+            const: "device.state_changed"
+          device_id:
+            type: string
+            format: uuid
+          previous_state:
+            type: object
+            description: Previous device state
+          current_state:
+            type: object
+            description: Current device state
+          timestamp:
+            type: string
+            format: date-time
+
+    CacheInvalidationEvent:
+      name: CacheInvalidationEvent
+      title: Cache Invalidation
+      summary: Cache invalidation for cross-service synchronization
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - event_id
+          - source_service
+          - cache_type
+          - action
+          - timestamp
+        properties:
+          event_id:
+            type: string
+            format: uuid
+          source_service:
+            type: string
+            description: Service that triggered the event
+          cache_type:
+            type: string
+            description: Type of cache data
+          affected_keys:
+            type: array
+            items:
+              type: string
+            description: Cache keys that should be invalidated
+          action:
+            type: string
+            enum: [invalidate, update, delete]
+          timestamp:
+            type: string
+            format: date-time
+      examples:
+        - name: houseDataUpdate
+          summary: House data updated, invalidate cache
+          payload:
+            event_id: "evt_12345678-abcd-4321-efgh-123456789012"
+            source_service: "house-management"
+            cache_type: "house_data"
+            affected_keys:
+              - "house:550e8400-e29b-41d4-a716-446655440020"
+              - "location:550e8400-e29b-41d4-a716-446655440030"
+            action: "invalidate"
+            timestamp: "2024-12-20T15:30:00.000Z" 
