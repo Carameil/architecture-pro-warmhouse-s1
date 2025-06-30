@@ -25,7 +25,9 @@ if ! docker exec smarthome-postgres pg_isready -U postgres > /dev/null 2>&1; the
 fi
 
 echo "All services are up and running!"
-echo "The API is available at http://localhost:8080"
+echo "Services available at:"
+echo "  - Temperature API: http://localhost:8081"
+echo "  - Smart Home App: http://localhost:8080"
 echo ""
 echo "To view logs, run: docker-compose logs -f"
 echo "To stop the services, run: docker-compose down"

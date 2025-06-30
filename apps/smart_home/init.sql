@@ -1,8 +1,5 @@
--- Create the database if it doesn't exist
-CREATE DATABASE smarthome;
-
--- Connect to the database
-\c smarthome;
+-- Database 'smarthome' is automatically created by POSTGRES_DB environment variable
+-- No need to create it manually
 
 -- Create the sensors table
 CREATE TABLE IF NOT EXISTS sensors (
