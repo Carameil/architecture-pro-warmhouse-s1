@@ -1,5 +1,8 @@
 # Smart Home Docker Management Makefile
 
+include .env
+export
+
 # Default target
 .DEFAULT_GOAL := help
 
@@ -190,13 +193,178 @@ init: ## Initialize complete environment using init.sh
 	@./init.sh
 
 .PHONY: dev-setup
-dev-setup: create-symfony build up ## Complete development setup
+dev-setup: create-symfony build up-full ## Complete development setup with infrastructure
 	@echo "${GREEN}Development environment setup complete!${NC}"
-	@echo "Services available at:"
-	@echo "  - Temperature API: http://localhost:8081"
+	@echo ""
+	@echo "${BLUE}Services available at:${NC}"
 	@echo "  - Smart Home App: http://localhost:8080"
+	@echo "  - Temperature API: http://localhost:8081"
 	@echo "  - PostgreSQL: localhost:5432"
+	@echo ""
+	@echo "${BLUE}Infrastructure services:${NC}"
+	@echo "  - RabbitMQ Management: http://localhost:15672 (admin/admin123)"
+	@echo "  - InfluxDB: http://localhost:8086 (admin/influx123)"
+	@echo "  - Redis Device Control: localhost:6379"
+	@echo "  - Redis Shared Cache: localhost:6380"
+	@echo ""
+	@echo "${YELLOW}To test all services, run: make test-infrastructure${NC}"
 
 .PHONY: dev-reset
 dev-reset: clean-volumes build up ## Reset development environment
-	@echo "${GREEN}Development environment reset complete!${NC}" 
+	@echo "${GREEN}Development environment reset complete!${NC}"
+
+##@ Infrastructure Services
+
+.PHONY: start-rabbitmq
+start-rabbitmq: ## Start RabbitMQ message broker
+	@echo "Starting RabbitMQ..."
+	@docker-compose up -d rabbitmq
+
+.PHONY: stop-rabbitmq
+stop-rabbitmq: ## Stop RabbitMQ
+	@echo "Stopping RabbitMQ..."
+	@docker-compose stop rabbitmq
+
+.PHONY: logs-rabbitmq
+logs-rabbitmq: ## Show RabbitMQ logs
+	@docker-compose logs -f rabbitmq
+
+.PHONY: rabbitmq-ui
+rabbitmq-ui: ## Open RabbitMQ Management UI
+	@echo "Opening RabbitMQ Management UI at http://localhost:15672"
+	@echo "Default credentials: admin/admin123"
+	@open http://localhost:15672 || xdg-open http://localhost:15672 || echo "Please open http://localhost:15672 in your browser"
+
+.PHONY: start-redis-device
+start-redis-device: ## Start Redis for Device Control
+	@echo "Starting Redis Device Control..."
+	@docker-compose up -d redis-device-control
+
+.PHONY: stop-redis-device
+stop-redis-device: ## Stop Redis Device Control
+	@echo "Stopping Redis Device Control..."
+	@docker-compose stop redis-device-control
+
+.PHONY: logs-redis-device
+logs-redis-device: ## Show Redis Device Control logs
+	@docker-compose logs -f redis-device-control
+
+.PHONY: redis-device-cli
+redis-device-cli: ## Connect to Redis Device Control CLI
+	@docker-compose exec redis-device-control redis-cli -a redis123
+
+.PHONY: start-redis-shared
+start-redis-shared: ## Start Redis Shared Cache
+	@echo "Starting Redis Shared Cache..."
+	@docker-compose up -d redis-shared
+
+.PHONY: stop-redis-shared
+stop-redis-shared: ## Stop Redis Shared Cache
+	@echo "Stopping Redis Shared Cache..."
+	@docker-compose stop redis-shared
+
+.PHONY: logs-redis-shared
+logs-redis-shared: ## Show Redis Shared Cache logs
+	@docker-compose logs -f redis-shared
+
+.PHONY: redis-shared-cli
+redis-shared-cli: ## Connect to Redis Shared Cache CLI
+	@docker-compose exec redis-shared redis-cli -a redis456
+
+.PHONY: start-influxdb
+start-influxdb: ## Start InfluxDB
+	@echo "Starting InfluxDB..."
+	@docker-compose up -d influxdb
+
+.PHONY: stop-influxdb
+stop-influxdb: ## Stop InfluxDB
+	@echo "Stopping InfluxDB..."
+	@docker-compose stop influxdb
+
+.PHONY: logs-influxdb
+logs-influxdb: ## Show InfluxDB logs
+	@docker-compose logs -f influxdb
+
+.PHONY: influxdb-ui
+influxdb-ui: ## Open InfluxDB UI
+	@echo "Opening InfluxDB UI at http://localhost:8086"
+	@echo "Default credentials: admin/influx123"
+	@open http://localhost:8086 || xdg-open http://localhost:8086 || echo "Please open http://localhost:8086 in your browser"
+
+.PHONY: start-infrastructure
+start-infrastructure: ## Start all infrastructure services
+	@echo "Starting all infrastructure services..."
+	@docker-compose up -d rabbitmq redis-device-control redis-shared influxdb
+	@echo "Waiting for services to be healthy..."
+	@sleep 10
+	@docker-compose ps
+
+.PHONY: stop-infrastructure
+stop-infrastructure: ## Stop all infrastructure services
+	@echo "Stopping all infrastructure services..."
+	@docker-compose stop rabbitmq redis-device-control redis-shared influxdb
+
+.PHONY: logs-infrastructure
+logs-infrastructure: ## Show all infrastructure logs
+	@docker-compose logs -f rabbitmq redis-device-control redis-shared influxdb
+
+##@ Testing Infrastructure
+
+.PHONY: test-rabbitmq
+test-rabbitmq: ## Test RabbitMQ connection
+	@echo "Testing RabbitMQ connection..."
+	@docker-compose exec rabbitmq rabbitmq-diagnostics ping || echo "RabbitMQ is not running"
+
+.PHONY: test-redis
+test-redis: ## Test Redis connections
+	@echo "Testing Redis Device Control..."
+	@docker-compose exec redis-device-control redis-cli -a redis123 ping || echo "Redis Device Control is not running"
+	@echo "Testing Redis Shared Cache..."
+	@docker-compose exec redis-shared redis-cli -a redis456 ping || echo "Redis Shared Cache is not running"
+
+.PHONY: test-influxdb
+test-influxdb: ## Test InfluxDB connection
+	@echo "Testing InfluxDB connection..."
+	@docker-compose exec influxdb influx ping || echo "InfluxDB is not running"
+
+.PHONY: test-infrastructure
+test-infrastructure: test-rabbitmq test-redis test-influxdb ## Test all infrastructure services
+	@echo "Infrastructure tests completed"
+
+.PHONY: test-device-registry
+test-device-registry: ## Test Device Registry microservice
+	@echo "Testing Device Registry API..."
+	@curl -f http://localhost:8082/health || echo "Device Registry health check failed"
+	@echo ""
+	@echo "Testing Device Types endpoint..."
+	@curl -f http://localhost:8082/api/v1/device-types || echo "Device Types endpoint failed"
+	@echo ""
+	@echo "Testing Devices endpoint..."
+	@curl -f http://localhost:8082/api/v1/devices || echo "Devices endpoint failed"
+
+##@ Full Stack Operations
+
+.PHONY: up-full
+up-full: ## Start entire system including new infrastructure
+	@echo "Starting full smart home system..."
+	@docker-compose up -d
+	@echo "Waiting for all services to be healthy..."
+	@sleep 15
+	@docker-compose ps
+	@echo ""
+	@echo "System is ready!"
+	@echo "- Smart Home App: http://localhost:8080"
+	@echo "- Temperature API: http://localhost:8081"
+	@echo "- RabbitMQ Management: http://localhost:15672 (admin/admin123)"
+	@echo "- InfluxDB: http://localhost:8086 (admin/influx123)"
+
+.PHONY: down-full
+down-full: ## Stop entire system
+	@echo "Stopping full smart home system..."
+	@docker-compose down
+
+.PHONY: logs-full
+logs-full: ## Show logs for all services
+	@docker-compose logs -f
+
+# ... existing code ... 

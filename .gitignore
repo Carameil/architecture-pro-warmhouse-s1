@@ -1,3 +1,4 @@
 .DS_Store
 .idea
-apps/postgres_data
+apps/db_volumes
+apps/.env
