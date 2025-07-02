@@ -456,3 +456,40 @@ device-registry/
 - Таблица `devices` с полной схемой из ER диаграммы
 - Proper indexes для производительности
 - UUID поддержка и timestamps
+
+### **3. Device Control Service (Python FastAPI)** ✅ **ЗАВЕРШЕН**
+
+**Архитектура и технологии:**
+- **Язык:** Python 3.11 с фреймворком FastAPI  
+- **Хранилище:** Redis-only архитектура для производительности в реальном времени
+- **Интеграция:** HTTP интеграция с Device Registry Service
+- **Порт:** 8083
+
+**Ключевые возможности:**
+- **Управление состоянием устройств:** Хранение состояний устройств в режиме реального времени в Redis
+- **Очередь команд:** Приоритетная очередь команд с использованием Redis sorted sets
+- **Валидация устройств:** Интеграция с Device Registry для валидации устройств
+- **Симуляция команд:** Демонстрационное выполнение команд для тестирования
+- **Мониторинг состояния:** Комплексные проверки работоспособности и обработка ошибок
+
+**API Endpoints:**
+- `GET /api/v1/devices/{deviceId}/state` - Получение состояния устройства
+- `PUT /api/v1/devices/{deviceId}/state` - Обновление состояния устройства
+- `POST /api/v1/devices/{deviceId}/commands` - Отправка команды устройству
+- `GET /api/v1/devices/{deviceId}/commands/{commandId}` - Получение статуса команды
+- `DELETE /api/v1/devices/{deviceId}/commands/{commandId}` - Отмена команды
+- `POST /api/v1/devices/{deviceId}/ping` - Проверка связности устройства
+- `POST /api/v1/devices/{deviceId}/process-queue` - Обработка ожидающих команд
+
+**Поддерживаемые типы команд:**
+- `turn_on` / `turn_off` - Управление питанием
+- `set_brightness` - Управление яркостью с параметрами
+- `set_temperature` - Управление температурой  
+- `lock` / `unlock` - Управление блокировкой
+- `ping` - Проверка связности
+
+**Структура данных Redis:**
+- Состояния устройств: `device:state:{device_id}` (Hash)
+- Команды: `device:command:{command_id}` (Hash)
+- Очереди команд: `device:queue:{device_id}` (Sorted Set по приоритету)
+- Наборы устройств: `devices:all`, `devices:online` (Sets)

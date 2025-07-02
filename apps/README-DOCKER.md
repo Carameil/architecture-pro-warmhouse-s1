@@ -50,8 +50,14 @@ make test-infrastructure
   - Full REST API with CRUD operations
   - Health monitoring and error handling
 
+- **Device Control Service** (Python FastAPI) - Port 8083 ✅ COMPLETED
+  - Redis-only architecture for real-time state management
+  - Command queue with priority handling
+  - Device state synchronization with Device Registry
+  - Simulated command execution for demo purposes
+  - Full REST API for device control operations
+
 ### Upcoming Microservices
-- **Device Control Service** (Python FastAPI) - Port 8083
 - **Telemetry Service** (Java Spring Boot) - Port 8084
 
 ### Docker Optimizations Applied
@@ -111,6 +117,9 @@ make test-influxdb         # Test InfluxDB only
 
 # Microservices Testing
 make test-device-registry  # Test Device Registry API
+make test-device-control   # Test Device Control API
+make test-device-control-state DEVICE_ID=<uuid>  # Test device state
+make test-device-control-command DEVICE_ID=<uuid>  # Send command to device
 ```
 
 ### Building

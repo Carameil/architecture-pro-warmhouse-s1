@@ -196,18 +196,29 @@ init: ## Initialize complete environment using init.sh
 dev-setup: create-symfony build up-full ## Complete development setup with infrastructure
 	@echo "${GREEN}Development environment setup complete!${NC}"
 	@echo ""
-	@echo "${BLUE}Services available at:${NC}"
-	@echo "  - Smart Home App: http://localhost:8080"
-	@echo "  - Temperature API: http://localhost:8081"
-	@echo "  - PostgreSQL: localhost:5432"
+	@echo "${BLUE}Core Application Services:${NC}"
+	@echo "  - Smart Home App (Go): http://localhost:8080"
+	@echo "  - Temperature API (PHP): http://localhost:8081"
 	@echo ""
-	@echo "${BLUE}Infrastructure services:${NC}"
-	@echo "  - RabbitMQ Management: http://localhost:15672 (admin/admin123)"
-	@echo "  - InfluxDB: http://localhost:8086 (admin/influx123)"
+	@echo "${BLUE}Microservices:${NC}"
+	@echo "  - Device Registry API (Go): http://localhost:8082"
+	@echo "  - Device Control API (Python): http://localhost:8083"
+	@echo "  - Telemetry Service (Java): http://localhost:8084 [Coming Soon]"
+	@echo ""
+	@echo "${BLUE}Database Services:${NC}"
+	@echo "  - PostgreSQL (Main): localhost:5432"
+	@echo "  - PostgreSQL (Device Registry): localhost:5433"
 	@echo "  - Redis Device Control: localhost:6379"
 	@echo "  - Redis Shared Cache: localhost:6380"
+	@echo "  - InfluxDB (Telemetry): localhost:8086"
 	@echo ""
-	@echo "${YELLOW}To test all services, run: make test-infrastructure${NC}"
+	@echo "${BLUE}Infrastructure Services:${NC}"
+	@echo "  - RabbitMQ Management: http://localhost:15672 (admin/admin123)"
+	@echo ""
+	@echo "${YELLOW}Testing Commands:${NC}"
+	@echo "  - Test Device Registry: make test-device-registry"
+	@echo "  - Test Device Control: make test-device-control"
+	@echo "  - Test Infrastructure: make test-infrastructure"
 
 .PHONY: dev-reset
 dev-reset: clean-volumes build up ## Reset development environment
@@ -342,6 +353,63 @@ test-device-registry: ## Test Device Registry microservice
 	@echo "Testing Devices endpoint..."
 	@curl -f http://localhost:8082/api/v1/devices || echo "Devices endpoint failed"
 
+##@ Device Control Service
+
+.PHONY: start-device-control
+start-device-control: ## Start Device Control Service
+	@echo "Starting Device Control Service..."
+	@docker-compose up -d device-control
+
+.PHONY: stop-device-control
+stop-device-control: ## Stop Device Control Service
+	@echo "Stopping Device Control Service..."
+	@docker-compose stop device-control
+
+.PHONY: restart-device-control
+restart-device-control: stop-device-control start-device-control ## Restart Device Control Service
+
+.PHONY: logs-device-control
+logs-device-control: ## Show Device Control Service logs
+	@docker-compose logs -f device-control
+
+.PHONY: build-device-control
+build-device-control: ## Build Device Control Service
+	@echo "Building Device Control Service..."
+	@docker-compose build device-control
+
+.PHONY: shell-device-control
+shell-device-control: ## Open shell in Device Control container
+	@docker-compose exec device-control /bin/bash
+
+.PHONY: test-device-control
+test-device-control: ## Test Device Control Service
+	@echo "Testing Device Control API health..."
+	@curl -f http://localhost:8083/api/v1/health || echo "Device Control health check failed"
+	@echo ""
+	@echo "Testing Device Control root endpoint..."
+	@curl -f http://localhost:8083/ || echo "Device Control root endpoint failed"
+
+.PHONY: test-device-control-state
+test-device-control-state: ## Test device state management (requires device ID)
+	@if [ -z "$(DEVICE_ID)" ]; then \
+		echo "Please provide DEVICE_ID: make test-device-control-state DEVICE_ID=<uuid>"; \
+	else \
+		echo "Getting device state for $(DEVICE_ID)..."; \
+		curl -f http://localhost:8083/api/v1/devices/$(DEVICE_ID)/state || echo "Failed to get device state"; \
+	fi
+
+.PHONY: test-device-control-command
+test-device-control-command: ## Send test command to device (requires device ID)
+	@if [ -z "$(DEVICE_ID)" ]; then \
+		echo "Please provide DEVICE_ID: make test-device-control-command DEVICE_ID=<uuid>"; \
+	else \
+		echo "Sending turn_on command to device $(DEVICE_ID)..."; \
+		curl -X POST http://localhost:8083/api/v1/devices/$(DEVICE_ID)/commands \
+			-H "Content-Type: application/json" \
+			-d '{"command_type": "turn_on", "parameters": {}}' \
+			|| echo "Failed to send command"; \
+	fi
+
 ##@ Full Stack Operations
 
 .PHONY: up-full
@@ -353,8 +421,10 @@ up-full: ## Start entire system including new infrastructure
 	@docker-compose ps
 	@echo ""
 	@echo "System is ready!"
-	@echo "- Smart Home App: http://localhost:8080"
-	@echo "- Temperature API: http://localhost:8081"
+	@echo "- Smart Home App (Go): http://localhost:8080"
+	@echo "- Temperature API (PHP): http://localhost:8081"
+	@echo "- Device Registry API (Go): http://localhost:8082"
+	@echo "- Device Control API (Python): http://localhost:8083"
 	@echo "- RabbitMQ Management: http://localhost:15672 (admin/admin123)"
 	@echo "- InfluxDB: http://localhost:8086 (admin/influx123)"
 

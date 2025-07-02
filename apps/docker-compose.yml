@@ -202,6 +202,41 @@ services:
       timeout: 10s
       retries: 3
 
+  # Device Control Service (Python FastAPI)
+  device-control:
+    build:
+      context: ./device-control
+      dockerfile: Dockerfile
+    container_name: ${DEVICE_CONTROL_CONTAINER:-device-control}
+    depends_on:
+      redis-device-control:
+        condition: service_healthy
+      device-registry:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - DEVICE_CONTROL_HOST=0.0.0.0
+      - DEVICE_CONTROL_PORT=${DEVICE_CONTROL_PORT:-8083}
+      - DEVICE_CONTROL_REDIS_HOST=${DEVICE_CONTROL_REDIS_HOST:-device-control-redis}
+      - DEVICE_CONTROL_REDIS_PORT=6379
+      - DEVICE_CONTROL_REDIS_PASSWORD=${REDIS_DEVICE_CONTROL_PASSWORD:-redis123}
+      - DEVICE_REGISTRY_URL=http://device-registry:8082
+      - RABBITMQ_HOST=${RABBITMQ_HOST:-smarthome-rabbitmq}
+      - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-admin123}
+    ports:
+      - "${DEVICE_CONTROL_PORT:-8083}:8083"
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8083/api/v1/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 networks:
   smarthome-network:
