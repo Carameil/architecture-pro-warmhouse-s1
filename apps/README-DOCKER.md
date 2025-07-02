@@ -57,8 +57,13 @@ make test-infrastructure
   - Simulated command execution for demo purposes
   - Full REST API for device control operations
 
-### Upcoming Microservices
-- **Telemetry Service** (Java Spring Boot) - Port 8084
+- **Telemetry Service** (Java Spring Boot) - Port 8084 ✅ COMPLETED
+  - InfluxDB time-series database for telemetry data storage
+  - Redis caching for device metadata and location mappings
+  - Device validation integration with Device Registry
+  - Batch telemetry data processing with high performance
+  - Statistical analytics (min, max, avg, sum, count)
+  - Full REST API for telemetry operations
 
 ### Docker Optimizations Applied
 ✅ **Lightweight Alpine images** - Reduced image size by ~70%  
@@ -120,6 +125,8 @@ make test-device-registry  # Test Device Registry API
 make test-device-control   # Test Device Control API
 make test-device-control-state DEVICE_ID=<uuid>  # Test device state
 make test-device-control-command DEVICE_ID=<uuid>  # Send command to device
+make test-telemetry        # Test Telemetry Service API
+make test-telemetry-statistics  # Test telemetry statistics endpoint
 ```
 
 ### Building

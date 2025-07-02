@@ -203,7 +203,7 @@ dev-setup: create-symfony build up-full ## Complete development setup with infra
 	@echo "${BLUE}Microservices:${NC}"
 	@echo "  - Device Registry API (Go): http://localhost:8082"
 	@echo "  - Device Control API (Python): http://localhost:8083"
-	@echo "  - Telemetry Service (Java): http://localhost:8084 [Coming Soon]"
+	@echo "  - Telemetry Service (Java): http://localhost:8084"
 	@echo ""
 	@echo "${BLUE}Database Services:${NC}"
 	@echo "  - PostgreSQL (Main): localhost:5432"
@@ -218,6 +218,7 @@ dev-setup: create-symfony build up-full ## Complete development setup with infra
 	@echo "${YELLOW}Testing Commands:${NC}"
 	@echo "  - Test Device Registry: make test-device-registry"
 	@echo "  - Test Device Control: make test-device-control"
+	@echo "  - Test Telemetry Service: make test-telemetry"
 	@echo "  - Test Infrastructure: make test-infrastructure"
 
 .PHONY: dev-reset
@@ -410,6 +411,46 @@ test-device-control-command: ## Send test command to device (requires device ID)
 			|| echo "Failed to send command"; \
 	fi
 
+##@ Telemetry Service
+
+.PHONY: start-telemetry
+start-telemetry: ## Start Telemetry Service
+	@echo "Starting Telemetry Service..."
+	@docker-compose up -d telemetry-service
+
+.PHONY: stop-telemetry
+stop-telemetry: ## Stop Telemetry Service
+	@echo "Stopping Telemetry Service..."
+	@docker-compose stop telemetry-service
+
+.PHONY: restart-telemetry
+restart-telemetry: stop-telemetry start-telemetry ## Restart Telemetry Service
+
+.PHONY: logs-telemetry
+logs-telemetry: ## Show Telemetry Service logs
+	@docker-compose logs -f telemetry-service
+
+.PHONY: build-telemetry
+build-telemetry: ## Build Telemetry Service
+	@echo "Building Telemetry Service..."
+	@docker-compose build telemetry-service
+
+.PHONY: test-telemetry
+test-telemetry: ## Test Telemetry Service
+	@echo "Testing Telemetry Service health..."
+	@curl -f http://localhost:8084/health || echo "Telemetry Service health check failed"
+	@echo ""
+	@echo "Testing telemetry data submission..."
+	@curl -X POST http://localhost:8084/api/v1/telemetry \
+		-H "Content-Type: application/json" \
+		-d '{"deviceId": "550e8400-e29b-41d4-a716-446655440000", "houseId": "550e8400-e29b-41d4-a716-446655440001", "locationId": "550e8400-e29b-41d4-a716-446655440002", "measurementType": "temperature", "value": 23.5, "unit": "celsius", "quality": "GOOD"}' \
+		|| echo "Failed to submit telemetry data"
+
+.PHONY: test-telemetry-statistics
+test-telemetry-statistics: ## Test telemetry statistics endpoint
+	@echo "Testing telemetry statistics..."
+	@curl -f "http://localhost:8084/api/v1/telemetry/statistics?deviceId=550e8400-e29b-41d4-a716-446655440000&measurementType=temperature&period=1h" || echo "Failed to get statistics"
+
 ##@ Full Stack Operations
 
 .PHONY: up-full
@@ -425,6 +466,7 @@ up-full: ## Start entire system including new infrastructure
 	@echo "- Temperature API (PHP): http://localhost:8081"
 	@echo "- Device Registry API (Go): http://localhost:8082"
 	@echo "- Device Control API (Python): http://localhost:8083"
+	@echo "- Telemetry Service (Java): http://localhost:8084"
 	@echo "- RabbitMQ Management: http://localhost:15672 (admin/admin123)"
 	@echo "- InfluxDB: http://localhost:8086 (admin/influx123)"
 

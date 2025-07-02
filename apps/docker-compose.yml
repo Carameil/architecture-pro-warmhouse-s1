@@ -238,6 +238,53 @@ services:
       retries: 3
       start_period: 40s
 
+  # Telemetry Service (Java Spring Boot)
+  telemetry-service:
+    build:
+      context: ./telemetry-service
+      dockerfile: Dockerfile
+    container_name: ${TELEMETRY_CONTAINER:-telemetry-service}
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      redis-shared:
+        condition: service_healthy
+      device-registry:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - TELEMETRY_PORT=${TELEMETRY_PORT:-8084}
+      - LOG_LEVEL=${TELEMETRY_LOG_LEVEL:-INFO}
+      # InfluxDB Configuration
+      - INFLUXDB_URL=http://telemetry-influxdb:8086
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-smart-home-telemetry-token}
+      - INFLUXDB_ORG=${INFLUXDB_ORG:-smart-home}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET:-telemetry}
+      - INFLUXDB_RETENTION=${INFLUXDB_RETENTION:-30d}
+      # Redis Configuration
+      - REDIS_SHARED_HOST=${REDIS_SHARED_HOST:-smarthome-redis-shared}
+      - REDIS_SHARED_PORT=6379
+      - REDIS_SHARED_PASSWORD=${REDIS_SHARED_PASSWORD:-redis456}
+      # RabbitMQ Configuration
+      - RABBITMQ_HOST=${RABBITMQ_HOST:-smarthome-rabbitmq}
+      - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-admin123}
+      # Device Registry Service
+      - DEVICE_REGISTRY_URL=http://device-registry:8082
+    ports:
+      - "${TELEMETRY_PORT:-8084}:8084"
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
 networks:
   smarthome-network:
     driver: bridge

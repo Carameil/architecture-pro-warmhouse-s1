@@ -493,3 +493,48 @@ device-registry/
 - Команды: `device:command:{command_id}` (Hash)
 - Очереди команд: `device:queue:{device_id}` (Sorted Set по приоритету)
 - Наборы устройств: `devices:all`, `devices:online` (Sets)
+
+### **4. Telemetry Service (Java Spring Boot)** ✅ **ЗАВЕРШЕН**
+
+**Архитектура и технологии:**
+- **Язык:** Java 17 с фреймворком Spring Boot 3.5.3
+- **База данных:** InfluxDB 2.7 для хранения временных рядов телеметрических данных
+- **Кэширование:** Redis для кэширования метаданных устройств и локаций
+- **Интеграция:** HTTP интеграция с Device Registry Service для валидации
+- **Порт:** 8084
+
+**Ключевые возможности:**
+- **Сбор телеметрии:** Прием и валидация телеметрических данных от IoT устройств
+- **Batch обработка:** Эффективная массовая загрузка данных через batch API
+- **Временные ряды:** Оптимизированное хранение в InfluxDB с retention policies
+- **Статистика и аналитика:** Агрегация данных (min, max, avg, sum, count)
+- **Кэширование:** Redis кэш для метаданных устройств и локаций
+- **Валидация устройств:** Интеграция с Device Registry для проверки существования устройств
+
+**API Endpoints:**
+- `POST /api/v1/telemetry` - Сохранение одиночных телеметрических данных
+- `POST /api/v1/telemetry/batch` - Массовая загрузка телеметрических данных
+- `GET /api/v1/telemetry/devices/{deviceId}` - Получение телеметрии устройства с фильтрацией по времени
+- `GET /api/v1/telemetry/statistics` - Получение статистики по устройству и типу измерения
+- `GET /health` - Проверка работоспособности со статусом InfluxDB и Redis
+
+**Поддерживаемые типы измерений:**
+- `temperature` - Температурные данные
+- `humidity` - Влажность
+- `power` - Потребление энергии
+- `brightness` - Уровень освещенности
+- `motion` - Детекция движения
+- `custom` - Пользовательские метрики
+
+**Модель данных InfluxDB:**
+- **Measurement:** `telemetry_data` - основная таблица измерений
+- **Tags:** device_id, house_id, location_id, measurement_type, quality
+- **Fields:** value, unit
+- **Aggregations:** автоматический расчет статистики по временным периодам
+
+**Архитектурные компоненты:**
+- **TelemetryController:** REST API с валидацией входных данных
+- **TelemetryService:** Основная бизнес-логика с кэшированием
+- **InfluxDBService:** Сервис работы с временными рядами
+- **DeviceValidationService:** Валидация через Device Registry API
+- **Configuration:** InfluxDB, Redis, RestTemplate конфигурации
