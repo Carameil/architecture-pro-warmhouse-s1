@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"smarthome/db"
+	"smarthome/events"
 	"smarthome/models"
 	"smarthome/services"
 
@@ -18,13 +19,39 @@ import (
 type SensorHandler struct {
 	DB                 *db.DB
 	TemperatureService *services.TemperatureService
+	EventPublisher     *events.Publisher
 }
 
 // NewSensorHandler creates a new SensorHandler
-func NewSensorHandler(db *db.DB, temperatureService *services.TemperatureService) *SensorHandler {
+func NewSensorHandler(db *db.DB, temperatureService *services.TemperatureService, eventPublisher *events.Publisher) *SensorHandler {
 	return &SensorHandler{
 		DB:                 db,
 		TemperatureService: temperatureService,
+		EventPublisher:     eventPublisher,
+	}
+}
+
+// publishEvent is a helper method to safely publish events
+func (h *SensorHandler) publishEvent(action string, sensorID int, name, sensorType, location string, value float64, status string) {
+	if h.EventPublisher == nil {
+		log.Printf("Event publisher not available, skipping %s event for sensor %d", action, sensorID)
+		return
+	}
+
+	var err error
+	switch action {
+	case "created":
+		err = h.EventPublisher.PublishSensorCreated(sensorID, name, sensorType, location)
+	case "updated":
+		err = h.EventPublisher.PublishSensorUpdated(sensorID, name, sensorType, location)
+	case "value_changed":
+		err = h.EventPublisher.PublishSensorValueChanged(sensorID, name, sensorType, location, value, status)
+	case "deleted":
+		err = h.EventPublisher.PublishSensorDeleted(sensorID, name, sensorType, location)
+	}
+
+	if err != nil {
+		log.Printf("Failed to publish %s event for sensor %d: %v", action, sensorID, err)
 	}
 }
 
@@ -142,6 +169,9 @@ func (h *SensorHandler) CreateSensor(c *gin.Context) {
 		return
 	}
 
+	// Publish sensor created event
+	h.publishEvent("created", sensor.ID, sensor.Name, string(sensor.Type), sensor.Location, 0, "")
+
 	c.JSON(http.StatusCreated, sensor)
 }
 
@@ -165,6 +195,9 @@ func (h *SensorHandler) UpdateSensor(c *gin.Context) {
 		return
 	}
 
+	// Publish sensor updated event
+	h.publishEvent("updated", sensor.ID, sensor.Name, string(sensor.Type), sensor.Location, 0, "")
+
 	c.JSON(http.StatusOK, sensor)
 }
 
@@ -176,11 +209,21 @@ func (h *SensorHandler) DeleteSensor(c *gin.Context) {
 		return
 	}
 
+	// Get sensor info before deletion for event
+	sensor, err := h.DB.GetSensorByID(context.Background(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Sensor not found"})
+		return
+	}
+
 	err = h.DB.DeleteSensor(context.Background(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Publish sensor deleted event
+	h.publishEvent("deleted", sensor.ID, sensor.Name, string(sensor.Type), sensor.Location, 0, "")
 
 	c.JSON(http.StatusOK, gin.H{"message": "Sensor deleted successfully"})
 }
@@ -203,11 +246,21 @@ func (h *SensorHandler) UpdateSensorValue(c *gin.Context) {
 		return
 	}
 
+	// Get sensor info for event
+	sensor, err := h.DB.GetSensorByID(context.Background(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Sensor not found"})
+		return
+	}
+
 	err = h.DB.UpdateSensorValue(context.Background(), id, request.Value, request.Status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Publish sensor value changed event
+	h.publishEvent("value_changed", sensor.ID, sensor.Name, string(sensor.Type), sensor.Location, request.Value, request.Status)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Sensor value updated successfully"})
 }

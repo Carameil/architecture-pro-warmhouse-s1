@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"device-registry/db"
+	"device-registry/events"
 	"device-registry/handlers"
 	"device-registry/services"
 
@@ -37,9 +41,19 @@ func main() {
 	deviceService := services.NewDeviceService(database)
 	deviceTypeService := services.NewDeviceTypeService(database)
 
+	// Initialize RabbitMQ subscriber
+	rabbitMQURL := getRabbitMQURL()
+	eventSubscriber, err := events.NewSubscriber(rabbitMQURL, deviceService, deviceTypeService)
+	if err != nil {
+		log.Printf("Warning: Unable to connect to RabbitMQ: %v (continuing without events)", err)
+		eventSubscriber = nil
+	} else {
+		defer eventSubscriber.Close()
+		log.Println("Connected to RabbitMQ successfully")
+	}
+
 	// Initialize handlers
 	deviceHandler := handlers.NewDeviceHandler(deviceService, deviceTypeService)
-	healthHandler := handlers.NewHealthHandler(database)
 
 	// Setup router
 	router := gin.Default()
@@ -59,7 +73,20 @@ func main() {
 	})
 
 	// Health check (no authentication required)
-	router.GET("/health", healthHandler.GetHealth)
+	router.GET("/health", func(c *gin.Context) {
+		healthData := gin.H{
+			"status":   "ok",
+			"database": "connected",
+		}
+
+		if eventSubscriber != nil && eventSubscriber.IsConnected() {
+			healthData["events"] = "connected"
+		} else {
+			healthData["events"] = "disconnected"
+		}
+
+		c.JSON(200, healthData)
+	})
 
 	// API routes
 	v1 := router.Group("/api/v1")
@@ -75,14 +102,53 @@ func main() {
 		v1.GET("/device-types", deviceHandler.GetDeviceTypes)
 	}
 
+	// Start event subscriber in a goroutine
+	if eventSubscriber != nil {
+		go func() {
+			ctx := context.Background()
+			if err := eventSubscriber.StartListening(ctx); err != nil {
+				log.Printf("Event subscriber error: %v", err)
+			}
+		}()
+	}
+
 	log.Printf("Device Registry Service starting on port %s", serverPort)
 	log.Printf("Database: %s:%s/%s", dbHost, dbPort, dbName)
 	log.Printf("Health check: http://localhost:%s/health", serverPort)
 	log.Printf("API: http://localhost:%s/api/v1", serverPort)
-
-	if err := router.Run(":" + serverPort); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	if eventSubscriber != nil {
+		log.Printf("Event subscriber: listening for sensor events")
 	}
+
+	// Handle graceful shutdown
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		if err := router.Run(":" + serverPort); err != nil {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	<-c
+	log.Println("Shutting down Device Registry Service...")
+
+	if eventSubscriber != nil {
+		eventSubscriber.Close()
+	}
+
+	log.Println("Device Registry Service stopped")
+}
+
+// getRabbitMQURL constructs RabbitMQ URL from environment variables
+func getRabbitMQURL() string {
+	host := getEnv("RABBITMQ_HOST", "localhost")
+	port := getEnv("RABBITMQ_PORT", "5672")
+	user := getEnv("RABBITMQ_USER", "admin")
+	password := getEnv("RABBITMQ_PASSWORD", "admin123")
+
+	return "amqp://" + user + ":" + password + "@" + host + ":" + port + "/"
 }
 
 // getEnv gets environment variable with fallback

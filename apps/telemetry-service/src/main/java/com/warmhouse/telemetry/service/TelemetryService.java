@@ -3,6 +3,7 @@ package com.warmhouse.telemetry.service;
 import com.warmhouse.telemetry.dto.TelemetryRequest;
 import com.warmhouse.telemetry.dto.TelemetryResponse;
 import com.warmhouse.telemetry.dto.TelemetryStatistics;
+import com.warmhouse.telemetry.events.TelemetryEventPublisher;
 import com.warmhouse.telemetry.model.TelemetryData;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -32,6 +33,7 @@ public class TelemetryService {
     private final InfluxDBService influxDBService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final DeviceValidationService deviceValidationService;
+    private final TelemetryEventPublisher eventPublisher;
     
     private static final String DEVICE_CACHE_PREFIX = "device:";
     private static final String LOCATION_CACHE_PREFIX = "location:";
@@ -69,6 +71,9 @@ public class TelemetryService {
         // Cache device location mapping
         cacheDeviceLocation(request.getDeviceId(), request.getLocationId());
         
+        // Publish measurement received event
+        eventPublisher.publishMeasurementReceived(data);
+        
         // Return response
         return TelemetryResponse.fromModel(data);
     }
@@ -100,6 +105,16 @@ public class TelemetryService {
         
         // Enrich with cached device/location names if available
         enrichStatisticsWithNames(stats);
+        
+        // Publish aggregated statistics event
+        if (stats != null) {
+            eventPublisher.publishMeasurementAggregated(
+                deviceId.toString(), 
+                measurementType, 
+                period, 
+                stats.toEventData()
+            );
+        }
         
         return stats;
     }
@@ -138,6 +153,9 @@ public class TelemetryService {
         
         if (!dataList.isEmpty()) {
             influxDBService.writeTelemetryDataBatch(dataList);
+            
+            // Publish batch measurement event
+            eventPublisher.publishBatchMeasurementsReceived(dataList);
         }
     }
     

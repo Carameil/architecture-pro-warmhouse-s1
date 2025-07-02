@@ -184,6 +184,8 @@ services:
         condition: service_healthy
       redis-shared:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       - DEVICE_REGISTRY_DB_HOST=${DEVICE_REGISTRY_DB_HOST:-postgres-device-registry}
       - DEVICE_REGISTRY_POSTGRES_PORT=5432
@@ -191,6 +193,11 @@ services:
       - DEVICE_REGISTRY_DB_PASSWORD=${DEVICE_REGISTRY_DB_PASSWORD:-device123}
       - DEVICE_REGISTRY_DB_NAME=${DEVICE_REGISTRY_DB_NAME:-device_registry}
       - DEVICE_REGISTRY_PORT=${DEVICE_REGISTRY_PORT:-8082}
+      # RabbitMQ Configuration
+      - RABBITMQ_HOST=${RABBITMQ_HOST:-smarthome-rabbitmq}
+      - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-admin123}
     ports:
       - "${DEVICE_REGISTRY_PORT:-8082}:8082"
     restart: unless-stopped

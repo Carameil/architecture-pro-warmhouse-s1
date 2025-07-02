@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"smarthome/db"
+	"smarthome/events"
 	"smarthome/handlers"
 	"smarthome/services"
 
@@ -27,6 +28,17 @@ func main() {
 
 	log.Println("Connected to database successfully")
 
+	// Initialize RabbitMQ publisher
+	rabbitMQURL := getEnv("RABBITMQ_URL", getRabbitMQURL())
+	eventPublisher, err := events.NewPublisher(rabbitMQURL)
+	if err != nil {
+		log.Printf("Warning: Unable to connect to RabbitMQ: %v (continuing without events)\n", err)
+		eventPublisher = nil
+	} else {
+		defer eventPublisher.Close()
+		log.Println("Connected to RabbitMQ successfully")
+	}
+
 	// Initialize temperature service
 	temperatureAPIURL := getEnv("TEMPERATURE_API_URL", "http://temperature-api:8081")
 	temperatureService := services.NewTemperatureService(temperatureAPIURL)
@@ -37,16 +49,25 @@ func main() {
 
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-		})
+		healthData := gin.H{
+			"status":   "ok",
+			"database": "connected",
+		}
+
+		if eventPublisher != nil && eventPublisher.IsConnected() {
+			healthData["events"] = "connected"
+		} else {
+			healthData["events"] = "disconnected"
+		}
+
+		c.JSON(http.StatusOK, healthData)
 	})
 
 	// API routes
 	apiRoutes := router.Group("/api/v1")
 
 	// Register sensor routes
-	sensorHandler := handlers.NewSensorHandler(database, temperatureService)
+	sensorHandler := handlers.NewSensorHandler(database, temperatureService, eventPublisher)
 	sensorHandler.RegisterRoutes(apiRoutes)
 
 	// Start server
@@ -77,6 +98,16 @@ func main() {
 	}
 
 	log.Println("Server exited properly")
+}
+
+// getRabbitMQURL constructs RabbitMQ URL from environment variables
+func getRabbitMQURL() string {
+	host := getEnv("RABBITMQ_HOST", "localhost")
+	port := getEnv("RABBITMQ_PORT", "5672")
+	user := getEnv("RABBITMQ_USER", "admin")
+	password := getEnv("RABBITMQ_PASSWORD", "admin123")
+
+	return "amqp://" + user + ":" + password + "@" + host + ":" + port + "/"
 }
 
 // getEnv gets an environment variable or returns a default value
