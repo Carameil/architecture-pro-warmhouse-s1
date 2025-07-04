@@ -2,6 +2,17 @@
 FROM composer:2.8 AS composer_stage
 WORKDIR /app
 
+# Copy composer files
+COPY app/composer.json app/composer.lock ./
+
+# Install dependencies based on environment
+ARG APP_ENV=prod
+RUN if [ "${APP_ENV}" = "dev" ]; then \
+        composer install --optimize-autoloader --no-interaction --no-scripts; \
+    else \
+        composer install --no-dev --optimize-autoloader --no-interaction --no-scripts; \
+    fi
+
 # Production stage
 FROM php:8.4-fpm-alpine
 
@@ -62,14 +73,24 @@ EOF
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy composer
+# Copy composer and dependencies from build stage
 COPY --from=composer_stage /usr/bin/composer /usr/local/bin/composer
+COPY --from=composer_stage /app/vendor ./vendor
+
+# Copy application code
+COPY app/ ./
 
 # Create simple startup script
 COPY <<EOF /usr/local/bin/start.sh
 #!/bin/sh
 # Start PHP-FPM in background
 php-fpm -D
+
+# Only warm up cache on startup
+if [ -f bin/console ]; then
+    bin/console cache:clear --env=\${APP_ENV:-prod} --no-warmup
+    bin/console cache:warmup --env=\${APP_ENV:-prod}
+fi
 
 # Start Nginx in foreground
 exec nginx -g 'daemon off;'
@@ -80,4 +101,4 @@ RUN chmod +x /usr/local/bin/start.sh
 EXPOSE 8081
 
 # startup
-CMD ["/usr/local/bin/start.sh"] 
+CMD ["/usr/local/bin/start.sh"]

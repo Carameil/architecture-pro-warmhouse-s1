@@ -65,6 +65,7 @@ paths:
                     device_name: "Living Room Temperature Sensor"
                     serial_number: "LR_TEMP_001"
                     is_online: true
+                    legacy_sensor_id: 12345
                     created_at: "2024-12-20T10:30:00Z"
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -143,6 +144,7 @@ paths:
                 installation_date: "2024-12-01"
                 is_online: true
                 last_seen: "2024-12-20T15:45:00Z"
+                legacy_sensor_id: 12345
                 created_at: "2024-12-20T10:30:00Z"
                 updated_at: "2024-12-20T15:45:00Z"
         '404':
@@ -266,6 +268,44 @@ paths:
                     is_active: true
                     created_at: "2024-12-01T00:00:00Z"
 
+  /device-types/{typeId}:
+    get:
+      summary: Get device type by ID
+      description: Get detailed information about a specific device type
+      tags:
+        - Device Types
+      parameters:
+        - name: typeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Device type information retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceType'
+              example:
+                type_id: "550e8400-e29b-41d4-a716-446655440010"
+                type_name: "Temperature Sensor"
+                category: "sensor"
+                manufacturer: "Xiaomi"
+                model: "WSDCGQ01LM"
+                protocol: "zigbee"
+                capabilities: {"measurements": ["temperature", "humidity"]}
+                default_config: {"interval": 60}
+                is_active: true
+                created_at: "2024-12-01T00:00:00Z"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
   /health:
     get:
       summary: Health check
@@ -365,6 +405,10 @@ components:
           type: string
           format: date-time
           description: Last seen timestamp
+        legacy_sensor_id:
+          type: integer
+          nullable: true
+          description: Legacy sensor ID for migration from monolith system
         created_at:
           type: string
           format: date-time

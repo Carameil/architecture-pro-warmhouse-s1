@@ -213,6 +213,7 @@ func (s *Subscriber) handleSensorCreated(event SensorEvent) error {
 			"created_by": "event_subscriber",
 			"location":   event.Location,
 		},
+		LegacySensorID: &event.SensorID,
 	}
 
 	// Use system UUID for registeredBy

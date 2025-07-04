@@ -19,8 +19,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
+    username: ${RABBITMQ_USER:admin}
+    password: ${RABBITMQ_PASSWORD:admin123}
     virtual-host: /
     
 # Server Configuration
@@ -57,7 +57,11 @@ management:
 # Logging
 logging:
   level:
-    com.warmhouse.telemetry: ${LOG_LEVEL:INFO}
+    com.warmhouse.telemetry: ${LOG_LEVEL:DEBUG}
     org.springframework.web: INFO
     org.springframework.data.redis: DEBUG
-    com.influxdb: INFO 
+    org.springframework.amqp: DEBUG
+    org.springframework.rabbit: DEBUG
+    org.springframework.context: DEBUG
+    com.influxdb: DEBUG
+    root: ${ROOT_LOG_LEVEL:INFO} 

@@ -426,4 +426,53 @@ class RedisService:
             
         except Exception as e:
             logger.error(f"Error cleaning up expired commands: {e}")
-            return 0 
+            return 0
+            
+    async def cleanup_device_data(self, device_id: str) -> bool:
+        """Clean up all data for a specific device.
+        
+        Args:
+            device_id: UUID of the device to clean up
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            queue_key = f"{self.COMMAND_QUEUE_PREFIX}{device_id}"
+            
+            # First, get all command IDs from the queue for this device
+            command_ids_bytes = self.redis.zrange(queue_key, 0, -1)
+            command_ids = [cmd_id.decode() for cmd_id in command_ids_bytes]
+
+            # Now, create a pipeline to delete everything atomically
+            pipe = self.redis.pipeline()
+
+            # 1. Delete all individual command keys
+            if command_ids:
+                command_keys = [f"{self.DEVICE_COMMAND_PREFIX}{cmd_id}" for cmd_id in command_ids]
+                pipe.delete(*command_keys)
+                logger.debug(f"Queued deletion for {len(command_keys)} command keys")
+
+            # 2. Delete the command queue itself
+            pipe.delete(queue_key)
+            logger.debug(f"Queued deletion for command queue: {queue_key}")
+            
+            # 3. Delete device state
+            state_key = f"{self.DEVICE_STATE_PREFIX}{device_id}"
+            pipe.delete(state_key)
+            logger.debug(f"Queued deletion for state key: {state_key}")
+
+            # 4. Remove from global device sets
+            pipe.srem(self.DEVICE_SET_KEY, device_id)
+            pipe.srem(self.ONLINE_DEVICES_KEY, device_id)
+            logger.debug(f"Queued removal of {device_id} from global sets")
+
+            # Execute all commands in the pipeline
+            pipe.execute()
+            
+            logger.info(f"Successfully cleaned up all data for device: {device_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error cleaning up data for device {device_id}: {e}")
+            return False 

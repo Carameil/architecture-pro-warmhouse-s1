@@ -136,11 +136,60 @@ paths:
               example:
                 command_id: "cmd_12345678-abcd-4321-efgh-123456789012"
                 device_id: "550e8400-e29b-41d4-a716-446655440001"
+                command_type: "set_temperature"
                 status: "pending"
+                message: "Temperature control command queued for execution"
                 created_at: "2024-12-20T15:30:00Z"
-                estimated_completion: "2024-12-20T15:30:30Z"
         '400':
           $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      summary: Get device commands
+      description: Get list of commands for a device with optional status filter
+      tags:
+        - Device Commands
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Filter by command status
+          schema:
+            type: string
+            enum: [pending, executing, completed, failed, cancelled]
+        - name: limit
+          in: query
+          description: Maximum number of commands to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Commands retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommandStatus'
+              example:
+                - command_id: "cmd_12345678-abcd-4321-efgh-123456789012"
+                  device_id: "550e8400-e29b-41d4-a716-446655440001"
+                  status: "completed"
+                  created_at: "2024-12-20T15:30:00Z"
+                  completed_at: "2024-12-20T15:30:25Z"
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -224,12 +273,46 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /devices/{deviceId}/connectivity:
-    get:
-      summary: Check device connectivity
-      description: Check if device is reachable and responsive
+  /devices/{deviceId}/ping:
+    post:
+      summary: Ping device
+      description: Send ping command to check device connectivity
       tags:
-        - Device Connectivity
+        - Device Commands
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Ping command accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+              example:
+                command_id: "cmd_ping_12345678-abcd-4321-efgh-123456789012"
+                device_id: "550e8400-e29b-41d4-a716-446655440001"
+                command_type: "ping"
+                status: "pending"
+                created_at: "2024-12-20T15:30:00Z"
+                message: "Ping command sent to device"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /devices/{deviceId}/process-queue:
+    post:
+      summary: Process device command queue
+      description: Process pending commands for a device (for testing purposes)
+      tags:
+        - Device Commands
       parameters:
         - name: deviceId
           in: path
@@ -239,18 +322,18 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Connectivity status retrieved
+          description: Queue processing initiated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ConnectivityStatus'
-              example:
-                device_id: "550e8400-e29b-41d4-a716-446655440001"
-                is_online: true
-                is_responsive: true
-                last_ping: "2024-12-20T15:29:45Z"
-                response_time_ms: 125
-                signal_strength: -45
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Processing command queue for device"
+                  processed_count:
+                    type: integer
+                    example: 3
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
@@ -366,18 +449,20 @@ components:
           type: string
           format: uuid
           description: Target device identifier
+        command_type:
+          type: string
+          description: Type of command that was executed
         status:
           type: string
-          enum: [pending, processing, completed, failed, cancelled]
+          enum: [pending, executing, completed, failed, cancelled]
           description: Command status
+        message:
+          type: string
+          description: Human-readable status message
         created_at:
           type: string
           format: date-time
           description: Command creation timestamp
-        estimated_completion:
-          type: string
-          format: date-time
-          description: Estimated completion time
 
     CommandStatus:
       type: object
@@ -414,30 +499,6 @@ components:
           format: date-time
         error_message:
           type: string
-
-    ConnectivityStatus:
-      type: object
-      description: Device connectivity information
-      properties:
-        device_id:
-          type: string
-          format: uuid
-        is_online:
-          type: boolean
-          description: Whether device is online
-        is_responsive:
-          type: boolean
-          description: Whether device responds to commands
-        last_ping:
-          type: string
-          format: date-time
-          description: Last successful ping
-        response_time_ms:
-          type: integer
-          description: Average response time in milliseconds
-        signal_strength:
-          type: integer
-          description: Signal strength in dBm
 
     Error:
       type: object
@@ -484,7 +545,6 @@ tags:
     description: Device state management operations
   - name: Device Commands
     description: Device command operations
-  - name: Device Connectivity
-    description: Device connectivity monitoring
+
   - name: Health
     description: Service health monitoring 

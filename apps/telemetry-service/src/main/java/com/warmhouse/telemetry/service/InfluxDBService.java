@@ -46,7 +46,8 @@ public class InfluxDBService {
         try {
             Point point = createPointFromTelemetryData(data);
             writeApi.writePoint(point);
-            log.debug("Successfully wrote telemetry data for device: {}", data.getDeviceId());
+            log.info("Successfully wrote telemetry data for device: {}, type: {}, value: {}, timestamp: {}", 
+                data.getDeviceId(), data.getMeasurementType(), data.getValue(), data.getTimestamp());
         } catch (Exception e) {
             log.error("Failed to write telemetry data: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to write telemetry data", e);
@@ -104,13 +105,20 @@ public class InfluxDBService {
             deviceId.toString(), measurementType
         );
         
+        log.info("Calculating statistics for device: {}, type: {}, period: {} - from {} to {}", 
+            deviceId, measurementType, period, start, end);
+        log.debug("Flux query: {}", flux);
+        
         // Calculate aggregations
         Map<String, Double> stats = new HashMap<>();
-        stats.put("min", queryAggregation(flux + " |> min()"));
-        stats.put("max", queryAggregation(flux + " |> max()"));
-        stats.put("mean", queryAggregation(flux + " |> mean()"));
-        stats.put("sum", queryAggregation(flux + " |> sum()"));
-        stats.put("count", queryAggregation(flux + " |> count()"));
+        stats.put("min", queryAggregation(flux + " |> min()", "min"));
+        stats.put("max", queryAggregation(flux + " |> max()", "max"));
+        stats.put("mean", queryAggregation(flux + " |> mean()", "mean"));
+        stats.put("sum", queryAggregation(flux + " |> sum()", "sum"));
+        stats.put("count", queryAggregation(flux + " |> count()", "count"));
+        
+        log.debug("Statistics calculated: min={}, max={}, mean={}, sum={}, count={}", 
+            stats.get("min"), stats.get("max"), stats.get("mean"), stats.get("sum"), stats.get("count"));
         
         return TelemetryStatistics.builder()
                 .deviceId(deviceId)
@@ -127,13 +135,16 @@ public class InfluxDBService {
     }
     
     private Point createPointFromTelemetryData(TelemetryData data) {
+        // Normalize quality to uppercase
+        String normalizedQuality = data.getQuality() != null ? data.getQuality().toUpperCase() : "UNKNOWN";
+        
         Point point = Point.measurement(MEASUREMENT_NAME)
                 .time(data.getTimestamp(), WritePrecision.NS)
                 .addTag("device_id", data.getDeviceId().toString())
                 .addTag("house_id", data.getHouseId().toString())
                 .addTag("location_id", data.getLocationId().toString())
                 .addTag("measurement_type", data.getMeasurementType())
-                .addTag("quality", data.getQuality() != null ? data.getQuality() : "UNKNOWN")
+                .addTag("quality", normalizedQuality)
                 .addField("value", data.getValue())
                 .addField("unit", data.getUnit() != null ? data.getUnit() : "");
         
@@ -152,6 +163,9 @@ public class InfluxDBService {
                 }
             });
         }
+        
+        log.debug("Created point for device: {}, measurement: {}, value: {}, quality: {}, timestamp: {}", 
+            data.getDeviceId(), data.getMeasurementType(), data.getValue(), normalizedQuality, data.getTimestamp());
         
         return point;
     }
@@ -196,17 +210,62 @@ public class InfluxDBService {
         }
     }
     
-    private Double queryAggregation(String flux) {
+    private Double queryAggregation(String flux, String aggregationType) {
         try {
+            log.debug("Executing {} aggregation query: {}", aggregationType, flux);
             List<FluxTable> tables = queryApi.query(flux, org);
-            if (!tables.isEmpty() && !tables.get(0).getRecords().isEmpty()) {
-                Object value = tables.get(0).getRecords().get(0).getValue();
-                if (value instanceof Number) {
-                    return ((Number) value).doubleValue();
+            log.debug("{} query returned {} tables", aggregationType, tables.size());
+            
+            // For aggregations like count, sum - we need to process all tables and combine results
+            if ("count".equals(aggregationType) || "sum".equals(aggregationType)) {
+                double total = 0.0;
+                for (FluxTable table : tables) {
+                    if (!table.getRecords().isEmpty()) {
+                        Object value = table.getRecords().get(0).getValue();
+                        if (value instanceof Number) {
+                            total += ((Number) value).doubleValue();
+                            log.debug("{} table result: {}", aggregationType, value);
+                        }
+                    }
+                }
+                log.debug("{} aggregation total result: {}", aggregationType, total);
+                return total;
+            }
+            
+            // For min, max, mean - find the appropriate value across all tables
+            List<Double> values = new ArrayList<>();
+            for (FluxTable table : tables) {
+                if (!table.getRecords().isEmpty()) {
+                    Object value = table.getRecords().get(0).getValue();
+                    if (value instanceof Number) {
+                        values.add(((Number) value).doubleValue());
+                        log.debug("{} table result: {}", aggregationType, value);
+                    }
                 }
             }
+            
+            if (!values.isEmpty()) {
+                double result;
+                switch (aggregationType) {
+                    case "min":
+                        result = values.stream().mapToDouble(Double::doubleValue).min().orElse(0.0);
+                        break;
+                    case "max":
+                        result = values.stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
+                        break;
+                    case "mean":
+                        result = values.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+                        break;
+                    default:
+                        result = values.get(0);
+                }
+                log.debug("{} aggregation final result: {}", aggregationType, result);
+                return result;
+            } else {
+                log.warn("No data found for {} aggregation query", aggregationType);
+            }
         } catch (Exception e) {
-            log.warn("Failed to query aggregation: {}", e.getMessage());
+            log.warn("Failed to query {} aggregation: {}", aggregationType, e.getMessage());
         }
         return 0.0;
     }

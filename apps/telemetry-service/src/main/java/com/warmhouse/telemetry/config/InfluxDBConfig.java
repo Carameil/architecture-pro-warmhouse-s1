@@ -4,6 +4,7 @@ import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.InfluxDBClientFactory;
 import com.influxdb.client.WriteApiBlocking;
 import com.influxdb.client.QueryApi;
+import com.influxdb.client.DeleteApi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -55,6 +56,11 @@ public class InfluxDBConfig {
     @Bean
     public QueryApi queryApi(InfluxDBClient client) {
         return client.getQueryApi();
+    }
+    
+    @Bean
+    public DeleteApi deleteApi(InfluxDBClient client) {
+        return client.getDeleteApi();
     }
     
     @Bean

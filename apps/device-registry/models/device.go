@@ -44,6 +44,7 @@ type DeviceRegistrationRequest struct {
 	Configuration    JSONB      `json:"configuration,omitempty"`
 	InstallationDate *time.Time `json:"installation_date,omitempty"`
 	WarrantyExpires  *time.Time `json:"warranty_expires,omitempty"`
+	LegacySensorID   *int       `json:"legacy_sensor_id,omitempty"`
 }
 
 // DeviceUpdateRequest represents the request to update device metadata

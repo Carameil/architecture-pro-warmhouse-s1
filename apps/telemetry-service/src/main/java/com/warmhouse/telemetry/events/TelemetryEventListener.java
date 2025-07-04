@@ -1,25 +1,41 @@
 package com.warmhouse.telemetry.events;
 
 import com.warmhouse.telemetry.service.DeviceValidationService;
+import com.warmhouse.telemetry.service.TelemetryCleanupService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-@Service
 public class TelemetryEventListener {
 
+    private static final Logger log = LoggerFactory.getLogger(TelemetryEventListener.class);
+    
     private final DeviceValidationService deviceValidationService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final TelemetryCleanupService cleanupService;
 
     @Autowired
     public TelemetryEventListener(DeviceValidationService deviceValidationService,
-                                RedisTemplate<String, Object> redisTemplate) {
+                                RedisTemplate<String, Object> redisTemplate,
+                                TelemetryCleanupService cleanupService) {
+        log.info("TelemetryEventListener constructor called!");
         this.deviceValidationService = deviceValidationService;
         this.redisTemplate = redisTemplate;
+        this.cleanupService = cleanupService;
+        log.info("TelemetryEventListener initialized successfully");
+    }
+
+    @PostConstruct
+    public void init() {
+        log.info("TelemetryEventListener @PostConstruct called - bean is ready");
     }
 
     /**
@@ -28,8 +44,9 @@ public class TelemetryEventListener {
     @RabbitListener(queues = RabbitMQConfig.TELEMETRY_DEVICE_EVENTS_QUEUE)
     public void handleDeviceEvents(Map<String, Object> eventData) {
         try {
+            log.info("TelemetryEventListener.handleDeviceEvents called with data: " + eventData);
             String eventType = (String) eventData.get("event_type");
-            System.out.println("Telemetry Service received event: " + eventType);
+            log.info("Telemetry Service received event: " + eventType);
 
             switch (eventType) {
                 case "device.created":
@@ -84,21 +101,34 @@ public class TelemetryEventListener {
     }
 
     /**
-     * Handle device deleted - clear cache completely
+     * Handle device deleted - perform cascading cleanup
      */
     private void handleDeviceDeleted(Map<String, Object> eventData) {
         Object deviceIdObj = eventData.get("device_id");
         if (deviceIdObj != null) {
-            String deviceId = deviceIdObj.toString();
-            
-            // Clear all cache entries for this device
-            String cachePattern = "*" + deviceId + "*";
             try {
-                redisTemplate.delete(redisTemplate.keys(cachePattern));
-                System.out.println("Cleared all cache for deleted device: " + deviceId);
+                String deviceIdStr = deviceIdObj.toString();
+                UUID deviceId = UUID.fromString(deviceIdStr);
+                
+                System.out.println("Processing device deletion cleanup for device: " + deviceId);
+                
+                // Perform comprehensive cleanup using the cleanup service
+                boolean success = cleanupService.cleanupDeviceData(deviceId);
+                
+                if (success) {
+                    System.out.println("Successfully completed cascading cleanup for device: " + deviceId);
+                } else {
+                    System.err.println("Cascading cleanup completed with errors for device: " + deviceId);
+                }
+                
+            } catch (IllegalArgumentException e) {
+                System.err.println("Invalid device ID format in deletion event: " + deviceIdObj);
             } catch (Exception e) {
-                System.err.println("Failed to clear cache for deleted device " + deviceId + ": " + e.getMessage());
+                System.err.println("Failed to cleanup deleted device " + deviceIdObj + ": " + e.getMessage());
+                e.printStackTrace();
             }
+        } else {
+            System.err.println("Device deletion event missing device_id field");
         }
     }
 

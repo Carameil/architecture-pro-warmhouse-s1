@@ -112,19 +112,6 @@ shell-app: ## Open shell in smart_home app container
 shell-postgres: ## Open PostgreSQL shell
 	docker-compose exec postgres psql -U postgres -d smarthome
 
-# Symfony specific commands
-.PHONY: create-symfony
-create-symfony: ## Create Symfony skeleton in temperature-api/app
-	@echo "${YELLOW}Creating Symfony skeleton...${NC}"
-	@mkdir -p temperature-api/app
-	@if [ ! -f "temperature-api/app/composer.json" ]; then \
-		cd temperature-api/app && \
-		composer create-project symfony/skeleton:"7.3.x-dev" . && \
-		composer require webapp; \
-	else \
-		echo "${RED}Symfony project already exists!${NC}"; \
-	fi
-
 .PHONY: composer-install
 composer-install: ## Install Composer dependencies in temperature-api/app
 	docker-compose exec temperature-api composer install
@@ -193,7 +180,7 @@ init: ## Initialize complete environment using init.sh
 	@./init.sh
 
 .PHONY: dev-setup
-dev-setup: create-symfony build up-full ## Complete development setup with infrastructure
+dev-setup: build up-full composer-install ## Complete development setup with infrastructure
 	@echo "${GREEN}Development environment setup complete!${NC}"
 	@echo ""
 	@echo "${BLUE}Core Application Services:${NC}"
@@ -247,18 +234,18 @@ rabbitmq-ui: ## Open RabbitMQ Management UI
 	@echo "Default credentials: admin/admin123"
 	@open http://localhost:15672 || xdg-open http://localhost:15672 || echo "Please open http://localhost:15672 in your browser"
 
-.PHONY: start-redis-device
-start-redis-device: ## Start Redis for Device Control
+.PHONY: start-redis-device-control
+start-redis-device-control: ## Start Redis for Device Control
 	@echo "Starting Redis Device Control..."
 	@docker-compose up -d redis-device-control
 
-.PHONY: stop-redis-device
-stop-redis-device: ## Stop Redis Device Control
+.PHONY: stop-redis-device-control
+stop-redis-device-control: ## Stop Redis Device Control
 	@echo "Stopping Redis Device Control..."
 	@docker-compose stop redis-device-control
 
-.PHONY: logs-redis-device
-logs-redis-device: ## Show Redis Device Control logs
+.PHONY: logs-redis-device-control
+logs-redis-device-control: ## Show Redis Device Control logs
 	@docker-compose logs -f redis-device-control
 
 .PHONY: redis-device-cli
@@ -353,6 +340,10 @@ test-device-registry: ## Test Device Registry microservice
 	@echo ""
 	@echo "Testing Devices endpoint..."
 	@curl -f http://localhost:8082/api/v1/devices || echo "Devices endpoint failed"
+
+.PHONY: logs-device-registry
+logs-device-registry: ## Show Device Registry logs
+	@docker-compose logs -f device-registry
 
 ##@ Device Control Service
 

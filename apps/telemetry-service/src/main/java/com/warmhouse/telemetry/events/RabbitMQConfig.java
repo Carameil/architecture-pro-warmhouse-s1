@@ -54,18 +54,20 @@ public class RabbitMQConfig {
     // Bind telemetry service to device events for cache invalidation
     @Bean
     public Binding telemetryDeviceEventsBinding() {
+        TopicExchange deviceExchange = new TopicExchange(DEVICE_EXCHANGE, true, false);
         return BindingBuilder
                 .bind(telemetryDeviceEventsQueue())
-                .to(new TopicExchange(DEVICE_EXCHANGE))
+                .to(deviceExchange)
                 .with("device.*");
     }
 
     // Bind telemetry service to sensor events for correlation
     @Bean
     public Binding telemetrySensorEventsBinding() {
+        TopicExchange sensorExchange = new TopicExchange(SENSOR_EXCHANGE, true, false);
         return BindingBuilder
                 .bind(telemetryDeviceEventsQueue())
-                .to(new TopicExchange(SENSOR_EXCHANGE))
+                .to(sensorExchange)
                 .with("sensor.*");
     }
 } 

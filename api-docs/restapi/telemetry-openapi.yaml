@@ -1,49 +1,50 @@
 openapi: 3.0.3
 info:
-  title: Telemetry Service API
-  description: Telemetry data collection and time-series storage for Smart Home system
+  title: Сервис телеметрии API
+  description: Сбор и хранение временных рядов для системы «Умный дом»
   version: 1.0.0
   contact:
-    name: Smart Home Team
+    name: Команда «Умный дом»
     email: dev@warmhouse.com
 
 servers:
-  - url: http://localhost:8084/api/v1
-    description: Development server
+  - url: http://localhost:8084
+    description: Сервер для разработки
 
 security:
   - BearerAuth: []
 
 paths:
-  /telemetry:
+  /api/v1/telemetry:
     post:
-      summary: Store telemetry data
-      description: Store sensor measurement data from devices
+      summary: Сохранить данные телеметрии
+      description: Сохранить данные измерений от устройств
       tags:
-        - Telemetry Data
+        - Данные телеметрии
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TelemetryDataCreate'
+              $ref: '#/components/schemas/TelemetryRequest'
             example:
-              device_id: "550e8400-e29b-41d4-a716-446655440001"
-              house_id: "550e8400-e29b-41d4-a716-446655440020"
-              location_id: "550e8400-e29b-41d4-a716-446655440030"
-              measurement_type: "temperature"
+              deviceId: "550e8400-e29b-41d4-a716-446655440001"
+              houseId: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+              locationId: "f0e9d8c7-b6a5-4321-fedc-ba9876543210"
+              measurementType: "temperature"
               value: 23.5
               unit: "celsius"
               quality: "good"
               timestamp: "2024-12-20T15:30:00Z"
-              tags: {"sensor_type": "digital"}
+              tags: {"sensor_type": "digital", "firmware": "v1.2"}
+              metadata: {"correlation_id": "corr-12345"}
       responses:
         '201':
-          description: Telemetry data stored successfully
+          description: Данные телеметрии успешно сохранены
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TelemetryData'
+                $ref: '#/components/schemas/TelemetryResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -51,214 +52,129 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-    get:
-      summary: Query telemetry data
-      description: Query historical telemetry data with filtering
+  /api/v1/telemetry/batch:
+    post:
+      summary: Сохранить пакет данных телеметрии
+      description: Сохранить несколько измерений телеметрии в одном запросе
       tags:
-        - Telemetry Data
+        - Данные телеметрии
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/TelemetryRequest'
+            example:
+              - deviceId: "550e8400-e29b-41d4-a716-446655440001"
+                houseId: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+                locationId: "f0e9d8c7-b6a5-4321-fedc-ba9876543210"
+                measurementType: "temperature"
+                value: 23.5
+                timestamp: "2024-12-20T15:30:00Z"
+              - deviceId: "550e8400-e29b-41d4-a716-446655440001"
+                houseId: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+                locationId: "f0e9d8c7-b6a5-4321-fedc-ba9876543210"
+                measurementType: "humidity"
+                value: 45.2
+                unit: "percent"
+                timestamp: "2024-12-20T15:30:05Z"
+      responses:
+        '201':
+          description: Пакет данных телеметрии успешно сохранен
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/telemetry/devices/{deviceId}:
+    get:
+      summary: Получить данные телеметрии для устройства
+      description: Получить исторические данные телеметрии для конкретного устройства с необязательным фильтром по периоду
+      tags:
+        - Данные телеметрии
       parameters:
-        - name: device_id
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: period
+          in: query
+          description: Временной период для запроса (например, 24h, 7d)
+          schema:
+            type: string
+            pattern: "^[0-9]+[hdm]$"
+          example: "24h"
+      responses:
+        '200':
+          description: Данные телеметрии успешно получены
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TelemetryResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/telemetry/statistics:
+    get:
+      summary: Получить статистику телеметрии
+      description: Получить агрегированную статистику телеметрии
+      tags:
+        - Статистика
+      parameters:
+        - name: deviceId
           in: query
           required: true
           schema:
             type: string
             format: uuid
-        - name: measurement_type
+        - name: measurementType
           in: query
+          required: true
           schema:
             type: string
           example: "temperature"
-        - name: start_time
+        - name: period
           in: query
+          description: Временной период для запроса (например, 24h, 7d, 30m)
           schema:
             type: string
-            format: date-time
-          example: "2024-12-20T00:00:00Z"
-        - name: end_time
-          in: query
-          schema:
-            type: string
-            format: date-time
-          example: "2024-12-20T23:59:59Z"
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 1000
-            default: 100
+            pattern: "^[0-9]+[hdm]$"
+            default: "24h"
       responses:
         '200':
-          description: Telemetry data retrieved successfully
+          description: Статистика успешно получена
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/TelemetryData'
-                  pagination:
-                    type: object
-                    properties:
-                      count:
-                        type: integer
-                      has_next:
-                        type: boolean
-              example:
-                data:
-                  - measurement_id: "550e8400-e29b-41d4-a716-446655440101"
-                    device_id: "550e8400-e29b-41d4-a716-446655440001"
-                    house_id: "550e8400-e29b-41d4-a716-446655440020"
-                    location_id: "550e8400-e29b-41d4-a716-446655440030"
-                    measurement_type: "temperature"
-                    value: 23.5
-                    unit: "celsius"
-                    quality: "good"
-                    timestamp: "2024-12-20T15:30:00Z"
-                    tags: {"sensor_type": "digital"}
-                pagination:
-                  count: 1
-                  has_next: false
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-  /telemetry/devices/{deviceId}/latest:
-    get:
-      summary: Get latest measurements
-      description: Get the most recent measurements for a specific device
-      tags:
-        - Telemetry Data
-      parameters:
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: measurement_types
-          in: query
-          description: Comma-separated list of measurement types
-          schema:
-            type: string
-          example: "temperature,humidity,battery_level"
-      responses:
-        '200':
-          description: Latest measurements retrieved
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  device_id:
-                    type: string
-                    format: uuid
-                  measurements:
-                    type: object
-                    additionalProperties:
-                      $ref: '#/components/schemas/LatestMeasurement'
-              example:
-                device_id: "550e8400-e29b-41d4-a716-446655440001"
-                measurements:
-                  temperature:
-                    value: 23.5
-                    unit: "celsius"
-                    timestamp: "2024-12-20T15:30:00Z"
-                    quality: "good"
-                  humidity:
-                    value: 45.2
-                    unit: "percent"
-                    timestamp: "2024-12-20T15:30:00Z"
-                    quality: "good"
+                $ref: '#/components/schemas/TelemetryStatistics'
         '404':
           $ref: '#/components/responses/NotFound'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
-
-  /metrics/devices/{deviceId}:
-    get:
-      summary: Get device metrics
-      description: Get aggregated metrics for a device
-      tags:
-        - Device Metrics
-      parameters:
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: metric_name
-          in: query
-          schema:
-            type: string
-          example: "avg_temperature"
-        - name: aggregation_period
-          in: query
-          schema:
-            type: string
-            enum: [hourly, daily, weekly, monthly]
-            default: daily
-        - name: start_date
-          in: query
-          schema:
-            type: string
-            format: date
-          example: "2024-12-01"
-        - name: end_date
-          in: query
-          schema:
-            type: string
-            format: date
-          example: "2024-12-20"
-      responses:
-        '200':
-          description: Device metrics retrieved
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  device_id:
-                    type: string
-                    format: uuid
-                  metrics:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/DeviceMetric'
-              example:
-                device_id: "550e8400-e29b-41d4-a716-446655440001"
-                metrics:
-                  - metric_id: "550e8400-e29b-41d4-a716-446655440201"
-                    metric_name: "avg_temperature"
-                    metric_value: 23.2
-                    aggregation_period: "daily"
-                    calculated_at: "2024-12-20T23:59:59Z"
-                    period_start: "2024-12-20T00:00:00Z"
-                    period_end: "2024-12-20T23:59:59Z"
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
+          
   /health:
     get:
-      summary: Health check
+      summary: Проверка состояния
       tags:
         - Health
       security: []
       responses:
         '200':
-          description: Service is healthy
+          description: Сервис в рабочем состоянии
           content:
             application/json:
               schema:
@@ -266,13 +182,13 @@ paths:
                 properties:
                   status:
                     type: string
-                    example: "healthy"
-                  influxdb_status:
+                    example: "UP"
+                  influxdb:
                     type: string
-                    example: "connected"
-                  cache_status:
+                    example: "UP"
+                  redis:
                     type: string
-                    example: "connected"
+                    example: "UP"
 
 components:
   securitySchemes:
@@ -282,164 +198,113 @@ components:
       bearerFormat: JWT
 
   schemas:
-    TelemetryData:
+    TelemetryRequest:
       type: object
-      description: TelemetryData entity as defined in ER diagram
+      description: Запрос на отправку данных телеметрии (соответствует TelemetryRequest.java)
       required:
-        - measurement_id
-        - device_id
-        - house_id
-        - location_id
-        - measurement_type
+        - deviceId
+        - houseId
+        - locationId
+        - measurementType
         - value
-        - timestamp
       properties:
-        measurement_id:
+        deviceId:
           type: string
           format: uuid
-          description: UUID primary key
-        device_id:
+        houseId:
           type: string
           format: uuid
-          description: Reference to Device entity
-        house_id:
+        locationId:
           type: string
           format: uuid
-          description: Reference to House entity
-        location_id:
+        measurementType:
           type: string
-          format: uuid
-          description: Reference to Location entity
-        measurement_type:
-          type: string
-          maxLength: 50
-          description: Type of measurement VARCHAR(50)
-        value:
-          type: number
-          format: double
-          description: Measurement value DOUBLE PRECISION
-        unit:
-          type: string
-          maxLength: 20
-          description: Unit of measurement VARCHAR(20)
-        quality:
-          type: string
-          maxLength: 20
-          description: Data quality indicator VARCHAR(20)
-        timestamp:
-          type: string
-          format: date-time
-          description: Measurement timestamp
-        tags:
-          type: object
-          description: Additional tags JSONB
-        metadata:
-          type: object
-          description: Additional metadata JSONB
-
-    TelemetryDataCreate:
-      type: object
-      required:
-        - device_id
-        - house_id
-        - location_id
-        - measurement_type
-        - value
-        - timestamp
-      properties:
-        device_id:
-          type: string
-          format: uuid
-        house_id:
-          type: string
-          format: uuid
-        location_id:
-          type: string
-          format: uuid
-        measurement_type:
-          type: string
-          maxLength: 50
         value:
           type: number
           format: double
         unit:
           type: string
-          maxLength: 20
         quality:
           type: string
-          maxLength: 20
-          default: "good"
         timestamp:
           type: string
           format: date-time
         tags:
           type: object
+          additionalProperties:
+            type: string
         metadata:
           type: object
+          additionalProperties: true
 
-    LatestMeasurement:
+    TelemetryResponse:
       type: object
+      description: Ответ с данными телеметрии (соответствует TelemetryResponse.java)
       properties:
+        measurementId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        houseId:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        measurementType:
+          type: string
         value:
           type: number
           format: double
         unit:
           type: string
+        quality:
+          type: string
         timestamp:
           type: string
           format: date-time
-        quality:
-          type: string
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
 
-    DeviceMetric:
+    TelemetryStatistics:
       type: object
-      description: DeviceMetrics entity as defined in ER diagram
-      required:
-        - metric_id
-        - device_id
-        - house_id
-        - metric_name
-        - metric_value
-        - calculated_at
-        - period_start
-        - period_end
+      description: Статистика по данным телеметрии (соответствует TelemetryStatistics.java)
       properties:
-        metric_id:
+        deviceId:
           type: string
           format: uuid
-          description: UUID primary key
-        device_id:
+        measurementType:
           type: string
-          format: uuid
-          description: Reference to Device entity
-        house_id:
+        period:
           type: string
-          format: uuid
-          description: Reference to House entity
-        metric_name:
-          type: string
-          maxLength: 100
-          description: Metric name VARCHAR(100)
-        metric_value:
+        min:
           type: number
           format: double
-          description: Calculated metric value DOUBLE PRECISION
-        aggregation_period:
-          type: string
-          maxLength: 20
-          description: Aggregation period VARCHAR(20)
-        calculated_at:
-          type: string
-          format: date-time
-          description: Calculation timestamp
-        period_start:
-          type: string
-          format: date-time
-          description: Period start timestamp
-        period_end:
-          type: string
-          format: date-time
-          description: Period end timestamp
+        max:
+          type: number
+          format: double
+        average:
+          type: number
+          format: double
+        sum:
+          type: number
+          format: double
+        count:
+          type: integer
+          format: int64
+        first:
+          type: number
+          format: double
+        last:
+          type: number
+          format: double
 
     Error:
       type: object
@@ -454,37 +319,34 @@ components:
 
   responses:
     BadRequest:
-      description: Bad request
+      description: Некорректный запрос
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-
     Unauthorized:
-      description: Unauthorized
+      description: Не авторизован
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-
     NotFound:
-      description: Resource not found
+      description: Ресурс не найден
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-
     InternalServerError:
-      description: Internal server error
+      description: Внутренняя ошибка сервера
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
 
 tags:
-  - name: Telemetry Data
-    description: Telemetry data collection and querying
-  - name: Device Metrics
-    description: Aggregated device metrics
+  - name: Данные телеметрии
+    description: Сбор и запрос данных телеметрии
+  - name: Статистика
+    description: Агрегированная статистика телеметрии
   - name: Health
-    description: Service health monitoring 
+    description: Мониторинг состояния сервиса 

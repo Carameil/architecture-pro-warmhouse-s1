@@ -26,6 +26,8 @@ services:
     build:
       context: ./temperature-api
       dockerfile: Dockerfile
+      args:
+        APP_ENV: ${APP_ENV}
     container_name: ${TEMPERATURE_API_CONTAINER}
     working_dir: /var/www/html
     volumes:
@@ -94,7 +96,7 @@ services:
   # Redis for Device Control Service
   redis-device-control:
     image: redis:7-alpine
-    container_name: ${REDIS_DEVICE_CONTROL_CONTAINER:-device-control-redis}
+    container_name: ${REDIS_DEVICE_CONTROL_CONTAINER:-redis-device-control}
     command: redis-server --requirepass ${REDIS_DEVICE_CONTROL_PASSWORD:-redis123} --port 6379
     ports:
       - "${REDIS_DEVICE_CONTROL_PORT:-6379}:6379"
@@ -225,7 +227,7 @@ services:
     environment:
       - DEVICE_CONTROL_HOST=0.0.0.0
       - DEVICE_CONTROL_PORT=${DEVICE_CONTROL_PORT:-8083}
-      - DEVICE_CONTROL_REDIS_HOST=${DEVICE_CONTROL_REDIS_HOST:-device-control-redis}
+      - DEVICE_CONTROL_REDIS_HOST=${DEVICE_CONTROL_REDIS_HOST:-redis-device-control}
       - DEVICE_CONTROL_REDIS_PORT=6379
       - DEVICE_CONTROL_REDIS_PASSWORD=${REDIS_DEVICE_CONTROL_PASSWORD:-redis123}
       - DEVICE_REGISTRY_URL=http://device-registry:8082

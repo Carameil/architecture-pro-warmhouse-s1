@@ -3,6 +3,7 @@ package services
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	"device-registry/db"
@@ -13,7 +14,8 @@ import (
 
 // DeviceService handles device operations
 type DeviceService struct {
-	db *db.DB
+	db             *db.DB
+	eventPublisher EventPublisher
 }
 
 // NewDeviceService creates a new device service
@@ -21,6 +23,11 @@ func NewDeviceService(database *db.DB) *DeviceService {
 	return &DeviceService{
 		db: database,
 	}
+}
+
+// SetEventPublisher sets the event publisher for the service
+func (s *DeviceService) SetEventPublisher(publisher EventPublisher) {
+	s.eventPublisher = publisher
 }
 
 // GetDevices returns a list of devices with filtering
@@ -171,14 +178,14 @@ func (s *DeviceService) CreateDevice(req models.DeviceRegistrationRequest, regis
 	query := `
 		INSERT INTO devices (device_id, type_id, house_id, location_id, registered_by,
 		                    device_name, serial_number, mac_address, firmware_version,
-		                    configuration, installation_date, warranty_expires, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		                    configuration, installation_date, warranty_expires, legacy_sensor_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING device_id`
 
 	err = s.db.QueryRow(query,
 		deviceID, req.TypeID, req.HouseID, req.LocationID, registeredBy,
 		req.DeviceName, req.SerialNumber, req.MacAddress, req.FirmwareVersion,
-		req.Configuration, req.InstallationDate, req.WarrantyExpires, now, now,
+		req.Configuration, req.InstallationDate, req.WarrantyExpires, req.LegacySensorID, now, now,
 	).Scan(&deviceID)
 
 	if err != nil {
@@ -264,8 +271,18 @@ func (s *DeviceService) UpdateDevice(deviceID uuid.UUID, req models.DeviceUpdate
 	return s.GetDeviceByID(deviceID)
 }
 
-// DeleteDevice soft deletes a device
+// DeleteDevice deletes a device and publishes cascading deletion event
 func (s *DeviceService) DeleteDevice(deviceID uuid.UUID) error {
+	// Get device info before deletion for event publishing
+	device, err := s.GetDeviceByID(deviceID)
+	if err != nil {
+		return fmt.Errorf("failed to get device for deletion: %w", err)
+	}
+	if device == nil {
+		return fmt.Errorf("device not found")
+	}
+
+	// Delete the device
 	result, err := s.db.Exec("DELETE FROM devices WHERE device_id = $1", deviceID)
 	if err != nil {
 		return fmt.Errorf("failed to delete device: %w", err)
@@ -278,6 +295,23 @@ func (s *DeviceService) DeleteDevice(deviceID uuid.UUID) error {
 
 	if rowsAffected == 0 {
 		return fmt.Errorf("device not found")
+	}
+
+	// Publish device deleted event for cascading deletion
+	if s.eventPublisher != nil {
+		err = s.eventPublisher.PublishDeviceDeleted(
+			device.DeviceID.String(),
+			device.HouseID.String(),
+			device.LocationID.String(),
+			device.DeviceName,
+			device.Type.TypeName,
+		)
+		if err != nil {
+			log.Printf("Warning: Failed to publish device deleted event for %s: %v", deviceID, err)
+			// Don't fail the deletion if event publishing fails
+		} else {
+			log.Printf("Published device.deleted event for device %s", deviceID)
+		}
 	}
 
 	return nil

@@ -8,10 +8,8 @@ Optimized Docker configuration for the Smart Home system with microservices arch
 # 1. Show all available commands
 make help
 
-# 2. Complete development setup (creates Symfony app + builds + starts services)
+# 2. Complete development setup (builds + starts services + composer install for temperature-api)
 make dev-setup
-
--Do you want to include Docker configuration from recipes? - choose [n] 'No' here
 
 # 3. Start full system with microservices infrastructure
 make up-full
@@ -168,76 +166,6 @@ make prune          # Remove unused Docker resources
 ### Environment Variables
 Configuration is managed via `.env` file (copy from `.env.example`):
 
-```bash
-# Infrastructure Services
-RABBITMQ_USER=admin
-RABBITMQ_PASSWORD=admin123
-RABBITMQ_PORT=5672
-RABBITMQ_MANAGEMENT_PORT=15672
-
-REDIS_DEVICE_CONTROL_PORT=6379
-REDIS_DEVICE_CONTROL_PASSWORD=redis123
-
-REDIS_SHARED_PORT=6380
-REDIS_SHARED_PASSWORD=redis456
-
-INFLUXDB_PORT=8086
-INFLUXDB_USER=admin
-INFLUXDB_PASSWORD=influx123
-INFLUXDB_DB=telemetry
-
-# Microservices Ports
-DEVICE_REGISTRY_PORT=8082
-DEVICE_CONTROL_PORT=8083
-TELEMETRY_SERVICE_PORT=8084
-```
-
-### File Structure
-```
-apps/
-├── .env.example            # Environment template (copy to .env)
-├── docker-compose.yml      # Services configuration  
-├── Makefile                # Management commands
-├── temperature-api/
-│   ├── Dockerfile          # Optimized PHP+Nginx image
-│   └── .dockerignore       # Build optimization
-├── smart_home/
-│   ├── Dockerfile          # Go application
-│   └── init.sql            # Database initialization
-└── (upcoming microservices folders)
-```
-
-## 🚀 API Endpoints
-
-### Temperature API (Port 8081)
-- `GET /temperature?location=Kitchen` - Get random temperature
-- `GET /health` - Health check
-
-### Smart Home App (Port 8080)  
-- See Postman collection for available endpoints
-
-### Infrastructure UIs
-- **RabbitMQ Management**: http://localhost:15672 (admin/admin123)
-- **InfluxDB**: http://localhost:8086 (admin/influx123)
-
-## 📊 Monitoring
-
-### Health Checks
-All services have health checks configured:
-- **PostgreSQL**: `pg_isready` check every 10s
-- **Temperature API**: HTTP health endpoint every 30s
-- **RabbitMQ**: `rabbitmq-diagnostics ping` every 30s
-- **Redis**: `redis-cli ping` every 30s
-- **InfluxDB**: `influx ping` every 30s
-
-### Logs
-```bash
-make logs              # All services
-make logs-infrastructure  # Infrastructure services only
-make logs-temp-api     # Temperature API only
-make logs-postgres     # PostgreSQL only
-```
-
 ## 🐛 Troubleshooting
 
 ### Common Issues
@@ -279,25 +207,6 @@ make test-redis          # Test both Redis instances
 make dev-reset           # Complete reset (⚠️ deletes data!)
 ```
 
-## 📈 Performance
-
-### Infrastructure Resources
-- **RabbitMQ**: ~100MB RAM (with management UI)
-- **Redis Device Control**: ~20MB RAM
-- **Redis Shared**: ~20MB RAM
-- **InfluxDB**: ~150MB RAM
-- **PostgreSQL**: ~50MB RAM
-- **Temperature API**: ~30MB RAM  
-- **Smart Home App**: ~20MB RAM
-
-### Optimizations Applied
-- ✅ **Image size**: Reduced from 1.2GB to 380MB (~70% reduction)
-- ✅ **Build time**: Multi-stage build with layer caching
-- ✅ **Memory usage**: Alpine-based images with minimal dependencies
-- ✅ **Startup time**: Optimized service dependencies and health checks
-
----
-
 ## 📝 Next Steps
 
 1. **Create .env file** (if not exists):
@@ -324,5 +233,3 @@ make dev-reset           # Complete reset (⚠️ deletes data!)
    - Device Registry Service (Go)
    - Device Control Service (Python)
    - Telemetry Service (Java Spring Boot)
-
-**Happy coding! 🚀** 

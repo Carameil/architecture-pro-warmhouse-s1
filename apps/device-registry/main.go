@@ -41,15 +41,29 @@ func main() {
 	deviceService := services.NewDeviceService(database)
 	deviceTypeService := services.NewDeviceTypeService(database)
 
-	// Initialize RabbitMQ subscriber
+	// Initialize RabbitMQ connections
 	rabbitMQURL := getRabbitMQURL()
+
+	// Initialize event publisher for device events
+	eventPublisher, err := events.NewPublisher(rabbitMQURL)
+	if err != nil {
+		log.Printf("Warning: Unable to connect to RabbitMQ for publishing: %v (continuing without event publishing)", err)
+		eventPublisher = nil
+	} else {
+		defer eventPublisher.Close()
+		// Set the event publisher in device service
+		deviceService.SetEventPublisher(eventPublisher)
+		log.Println("Device event publisher connected successfully")
+	}
+
+	// Initialize RabbitMQ subscriber
 	eventSubscriber, err := events.NewSubscriber(rabbitMQURL, deviceService, deviceTypeService)
 	if err != nil {
-		log.Printf("Warning: Unable to connect to RabbitMQ: %v (continuing without events)", err)
+		log.Printf("Warning: Unable to connect to RabbitMQ for subscribing: %v (continuing without event subscription)", err)
 		eventSubscriber = nil
 	} else {
 		defer eventSubscriber.Close()
-		log.Println("Connected to RabbitMQ successfully")
+		log.Println("Event subscriber connected successfully")
 	}
 
 	// Initialize handlers
@@ -79,10 +93,18 @@ func main() {
 			"database": "connected",
 		}
 
+		// Check event subscriber
 		if eventSubscriber != nil && eventSubscriber.IsConnected() {
-			healthData["events"] = "connected"
+			healthData["event_subscriber"] = "connected"
 		} else {
-			healthData["events"] = "disconnected"
+			healthData["event_subscriber"] = "disconnected"
+		}
+
+		// Check event publisher
+		if eventPublisher != nil && eventPublisher.IsConnected() {
+			healthData["event_publisher"] = "connected"
+		} else {
+			healthData["event_publisher"] = "disconnected"
 		}
 
 		c.JSON(200, healthData)
@@ -136,6 +158,10 @@ func main() {
 
 	if eventSubscriber != nil {
 		eventSubscriber.Close()
+	}
+
+	if eventPublisher != nil {
+		eventPublisher.Close()
 	}
 
 	log.Println("Device Registry Service stopped")
