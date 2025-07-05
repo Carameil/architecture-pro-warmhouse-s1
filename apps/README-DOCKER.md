@@ -8,11 +8,11 @@ Optimized Docker configuration for the Smart Home system with microservices arch
 # 1. Show all available commands
 make help
 
-# 2. Complete development setup (builds + starts services + composer install for temperature-api)
-make dev-setup
+# 2. Create .env file** (if not exists):
+cp env.example .env
 
-# 3. Start full system with microservices infrastructure
-make up-full
+# 3. Complete development setup (builds + starts services + composer install for temperature-api)
+make dev-setup
 
 # 4. Check services status
 make status
@@ -42,33 +42,26 @@ make test-infrastructure
   - Port 8086: HTTP API and UI (admin/influx123)
 
 ### Implemented Microservices
-- **Device Registry Service** (Go) - Port 8082 ✅ COMPLETED
+- **Device Registry Service** (Go) - Port 8082
   - Clean Architecture with dependency injection
   - PostgreSQL with device catalog and registry
   - Full REST API with CRUD operations
   - Health monitoring and error handling
 
-- **Device Control Service** (Python FastAPI) - Port 8083 ✅ COMPLETED
+- **Device Control Service** (Python FastAPI) - Port 8083
   - Redis-only architecture for real-time state management
   - Command queue with priority handling
   - Device state synchronization with Device Registry
   - Simulated command execution for demo purposes
   - Full REST API for device control operations
 
-- **Telemetry Service** (Java Spring Boot) - Port 8084 ✅ COMPLETED
+- **Telemetry Service** (Java Spring Boot) - Port 8084
   - InfluxDB time-series database for telemetry data storage
   - Redis caching for device metadata and location mappings
   - Device validation integration with Device Registry
   - Batch telemetry data processing with high performance
   - Statistical analytics (min, max, avg, sum, count)
   - Full REST API for telemetry operations
-
-### Docker Optimizations Applied
-✅ **Lightweight Alpine images** - Reduced image size by ~70%  
-✅ **Multi-stage build** - Composer separation for smaller final image  
-✅ **Minimal layers** - Combined RUN commands to reduce layer count  
-✅ **Cache cleanup** - Removed temporary files and package caches  
-✅ **Build deps cleanup** - Virtual packages removed after installation  
 
 ## 🛠️ Development Commands
 
@@ -206,30 +199,3 @@ make test-redis          # Test both Redis instances
 ```bash
 make dev-reset           # Complete reset (⚠️ deletes data!)
 ```
-
-## 📝 Next Steps
-
-1. **Create .env file** (if not exists):
-   ```bash
-   cp env.example .env
-   ```
-
-2. **Start infrastructure**:
-   ```bash
-   make up-full
-   ```
-
-3. **Verify all services**:
-   ```bash
-   make test-infrastructure
-   make status
-   ```
-
-4. **Access UIs**:
-   - RabbitMQ: http://localhost:15672
-   - InfluxDB: http://localhost:8086
-
-5. **Begin microservices development**:
-   - Device Registry Service (Go)
-   - Device Control Service (Python)
-   - Telemetry Service (Java Spring Boot)
