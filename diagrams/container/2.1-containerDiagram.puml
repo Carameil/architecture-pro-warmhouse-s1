@@ -31,7 +31,7 @@ System_Boundary(smartHomeEcosystem, "Smart Home Ecosystem") {
     
     ' Databases (Database per Service Pattern - Following Bounded Contexts)
     ContainerDb(deviceRegistryDb, "Device Registry DB", "PostgreSQL", "Device catalog, metadata, device types, external API configs")
-    ContainerDb(telemetryDb, "Telemetry Database", "InfluxDB", "Time-series measurement data, sensor history")
+    ContainerDb(telemetryDb, "Telemetry Database", "InfluxDB", "Time-series measurement data, device history")
     ContainerDb(userDb, "User Management DB", "PostgreSQL", "Users, authentication, profiles, permissions")
     ContainerDb(houseDb, "House Management DB", "PostgreSQL", "Houses, rooms, locations, property configurations")
     ContainerDb(scenarioDb, "Scenario Database", "PostgreSQL", "Automation rules, triggers, conditions, user scenarios")
@@ -65,7 +65,7 @@ Rel(telemetryService, sharedCache, "Caches device metadata", "Redis Protocol")
 Rel(scenarioService, sharedCache, "Caches active scenarios", "Redis Protocol")
 
 ' External Integrations
-Rel(smartDevices, telemetryService, "Sends sensor data", "MQTT/CoAP")
+Rel(smartDevices, telemetryService, "Sends device data", "MQTT/CoAP")
 Rel(deviceControl, smartDevices, "Sends commands", "MQTT/HTTP")
 Rel(deviceRegistry, externalTempApi, "Fetches weather data for enrichment", "HTTP/REST")
 
@@ -93,7 +93,7 @@ Rel(scenarioService, deviceRegistry, "Gets device information", "HTTP/REST")
 
 ' Scenario automation calls
 Rel(scenarioService, deviceControl, "Triggers automated device actions", "HTTP/REST")
-Rel(scenarioService, telemetryService, "Reads sensor data for rule evaluation", "HTTP/REST")
+Rel(scenarioService, telemetryService, "Reads device data for rule evaluation", "HTTP/REST")
 
 ' Initial Data Loading (Startup Only)
 Rel(deviceRegistry, houseManagement, "Initial cache load", "HTTP/REST", $tags="startup")
