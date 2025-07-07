@@ -1,0 +1,124 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C4 Code Diagram - Rule Engine (Scenario Service / Java Spring Boot - CORE CRITICAL)
+
+class RuleEngine {
+    -rules: List<Rule>
+    -eventSubscriber: EventSubscriber
+    -houseValidator: HouseValidator
+    +processEvent(event: TriggerEvent): void
+    +addRule(rule: Rule): void
+    +removeRule(ruleId: string): void
+    +executeRule(rule: Rule): void
+    +validateRuleAccess(rule: Rule, userId: string): boolean
+}
+
+class Rule {
+    -id: string
+    -name: string
+    -enabled: boolean
+    -trigger: Trigger
+    -actions: List<Action>
+    -userId: string
+    -houseId: string
+    -locationId: string
+    +matches(event: TriggerEvent): boolean
+    +execute(): void
+    +validate(): boolean
+    +hasAccessToLocation(userId: string): boolean
+}
+
+class Trigger {
+    -type: TriggerType
+    -deviceId: string
+    -condition: string
+    -value: string
+    -locationId: string
+    +matches(event: TriggerEvent): boolean
+    +validateLocation(): boolean
+}
+
+class Action {
+    -type: ActionType
+    -deviceId: string
+    -command: string
+    -parameters: Map<string, string>
+    -targetLocationId: string
+    +execute(): void
+    +validateLocationAccess(userId: string): boolean
+}
+
+class TriggerEvent {
+    -eventType: string
+    -deviceId: string
+    -value: string
+    -timestamp: datetime
+    -userId: string
+    -houseId: string
+    -locationId: string
+}
+
+class EventSubscriber {
+    -mqttClient: MqttClient
+    -ruleEngine: RuleEngine
+    +subscribeToEvents(): void
+    +onEventReceived(event: TriggerEvent): void
+}
+
+class ActionExecutor {
+    -deviceControlService: DeviceControlService
+    -notificationService: NotificationService
+    -houseValidator: HouseValidator
+    +executeDeviceAction(action: Action): void
+    +sendNotification(message: string, userId: string): void
+    +validateActionLocation(action: Action, userId: string): boolean
+}
+
+class HouseValidator {
+    -houseManagementService: HouseManagementService
+    +validateUserHouseAccess(userId: string, houseId: string): boolean
+    +validateUserLocationAccess(userId: string, locationId: string): boolean
+    +validateDeviceLocation(deviceId: string, locationId: string): boolean
+}
+
+class HouseManagementService {
+    +validateAccess(userId: string, houseId: string): boolean
+    +validateLocationAccess(userId: string, locationId: string): boolean
+    +getDeviceLocation(deviceId: string): string
+}
+
+enum TriggerType {
+    SENSOR_VALUE
+    TIME_BASED
+    DEVICE_STATE
+    LOCATION_BASED
+}
+
+enum ActionType {
+    DEVICE_CONTROL
+    NOTIFICATION
+    LOCATION_CONTROL
+}
+
+' Relationships
+RuleEngine ||--o{ Rule
+RuleEngine ||--|| EventSubscriber
+RuleEngine ||--|| ActionExecutor
+RuleEngine ||--|| HouseValidator
+
+Rule ||--|| Trigger
+Rule ||--o{ Action
+
+EventSubscriber ||--|| TriggerEvent
+
+ActionExecutor ||--|| HouseValidator
+HouseValidator ||--|| HouseManagementService
+
+note right of RuleEngine : "Automation core with validation:\n- Processes events\n- Executes rules\n- Validates location access\n- House Management integration"
+
+note bottom of Rule : "Rule with location context:\n- Trigger + actions\n- House/location binding\n- Access validation\n- User ownership"
+
+note left of HouseValidator : "Access validation:\n- House access check\n- Location access check\n- Device validation\n- House Service integration"
+
+@enduml 

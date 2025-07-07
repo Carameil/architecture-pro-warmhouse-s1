@@ -1,0 +1,72 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Component Diagram - Device Registry Service (Device Context - Simplified Caching)
+
+Container(apiGateway, "API Gateway", "Kong/NGINX", "Routes requests to microservices")
+Container(deviceControl, "Device Control Service", "Go", "Device commands and state management")
+Container(telemetry, "Telemetry Service", "Go", "Telemetry data collection")
+Container(scenarioService, "Scenario Service", "Java Spring Boot", "Automation scenarios")
+Container(houseManagement, "House Management Service", "Java Spring Boot", "House and location management (startup sync only)")
+
+System_Ext(externalTempApi, "External Temperature API", "Weather and temperature data")
+
+Container_Boundary(deviceRegistry, "Device Registry Service") {
+    Component(deviceApi, "Device API", "Gin Framework", "REST API for device catalog management\n- Device registration\n- Device metadata CRUD\n- Device type management\n- Device search and filtering")
+    
+    Component(catalogManager, "Device Catalog Manager", "Go", "Core business logic for device catalog\n- Device metadata management\n- Device type definitions\n- Device validation rules\n- Catalog organization")
+    
+    Component(cacheManager, "Cache Manager", "Go", "Shared cache management\n- House/location data cache\n- Cache updates from events\n- Simple TTL policies\n- Fallback to API calls")
+    
+    Component(externalIntegration, "External Integration", "Go", "Integration with external APIs\n- Temperature API client\n- Weather data enrichment\n- Device firmware updates\n- Partner device catalogs")
+    
+    Component(deviceValidator, "Device Validator", "Go", "Device validation and verification\n- Device compatibility checks\n- Protocol validation\n- Location validation (via cache)\n- Registration validation")
+    
+    Component(eventPublisher, "Event Publisher", "Go", "Event publishing to message broker\n- Device registration events\n- Catalog update events\n- Device status change events\n- Integration status events")
+    
+    Component(eventSubscriber, "Event Subscriber", "Go", "Event subscription and processing\n- House/location update events\n- Access permission events\n- Cache invalidation\n- Event filtering")
+}
+
+ContainerDb(deviceRegistryDb, "Device Registry DB", "PostgreSQL", "Device catalog, metadata, types, external configs")
+ContainerDb(sharedCache, "Shared Cache", "Redis", "Sessions, permissions, frequently accessed data")
+Container(messageBroker, "Message Broker", "RabbitMQ", "Event streaming and cache updates")
+
+' External interactions
+Rel(apiGateway, deviceApi, "Manages device catalog", "HTTPS/REST")
+Rel(deviceControl, deviceApi, "Validates device existence", "HTTP/REST") 
+Rel(telemetry, deviceApi, "Validates device metadata", "HTTP/REST")
+Rel(scenarioService, deviceApi, "Gets device information", "HTTP/REST")
+
+' Startup sync only
+Rel(deviceApi, houseManagement, "Initial cache load on startup", "HTTP/REST", $tags="startup")
+
+' Internal component interactions
+Rel(deviceApi, catalogManager, "Delegates business logic", "Go interfaces")
+Rel(deviceApi, deviceValidator, "Validates requests", "Go interfaces")
+Rel(catalogManager, deviceValidator, "Validates device specs", "Go interfaces")
+Rel(catalogManager, externalIntegration, "Enriches device data", "Go interfaces")
+Rel(catalogManager, eventPublisher, "Publishes catalog events", "Go interfaces")
+Rel(deviceValidator, cacheManager, "Validates location via cache", "Go interfaces")
+Rel(deviceValidator, eventPublisher, "Publishes validation events", "Go interfaces")
+Rel(cacheManager, catalogManager, "Provides cached data", "Go interfaces")
+
+' Data storage
+Rel(catalogManager, deviceRegistryDb, "Stores device catalog", "SQL/GORM")
+Rel(deviceValidator, deviceRegistryDb, "Reads validation rules", "SQL/GORM")
+
+' Simplified cache access
+Rel(cacheManager, sharedCache, "Reads/writes cached data", "Redis Protocol")
+
+' External integrations
+Rel(externalIntegration, externalTempApi, "Fetches weather data", "HTTP/REST")
+
+' Event publishing
+Rel(eventPublisher, messageBroker, "Publishes device events", "AMQP")
+
+' Event subscription for cache updates
+Rel(messageBroker, eventSubscriber, "Receives house/location events", "AMQP")
+Rel(eventSubscriber, cacheManager, "Invalidates/updates cache", "Go interfaces")
+
+@enduml 

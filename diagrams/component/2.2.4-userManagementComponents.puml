@@ -1,0 +1,63 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Component Diagram - User Management Service (Identity Context - Simplified Caching)
+
+Container(apiGateway, "API Gateway", "Kong/NGINX", "Routes requests to microservices")
+Container(deviceControl, "Device Control Service", "Go", "Initial permissions consumer")
+Container(scenarioService, "Scenario Service", "Java Spring Boot", "Initial ownership consumer")
+Container(houseManagement, "House Management Service", "Java Spring Boot", "User ownership validation")
+
+Container_Boundary(userManagement, "User Management Service") {
+    Component(userApi, "User API", "Spring Boot", "REST API for user management\n- User registration/login\n- Profile management\n- Authentication\n- Permission management")
+    
+    Component(authManager, "Authentication Manager", "Java", "Authentication and authorization\n- JWT token management\n- Password encryption\n- Session management\n- OAuth integration")
+    
+    Component(profileManager, "User Profile Manager", "Java", "User profile management\n- Personal information\n- Preferences management\n- Notification settings\n- Account management")
+    
+    Component(permissionManager, "Permission Manager", "Java", "Access control and permissions\n- Role-based access control\n- User permissions\n- Authentication validation\n- Access rights management")
+    
+    Component(sessionCacheManager, "Session Cache Manager", "Java", "Shared cache management\n- JWT token storage\n- User sessions\n- Permission cache\n- Simple cache operations")
+    
+    Component(userEventPublisher, "Event Publisher", "Java", "CRITICAL: Event source for permissions\n- User created/updated events\n- Permission change events\n- Role assignment events\n- User deactivation events")
+}
+
+ContainerDb(userDb, "User Management DB", "PostgreSQL", "Users, authentication, profiles, permissions")
+ContainerDb(sharedCache, "Shared Cache", "Redis", "Sessions, permissions, frequently accessed data")
+Container(messageBroker, "Message Broker", "RabbitMQ", "Event streaming - distributes user/permission updates")
+
+' External interactions
+Rel(apiGateway, userApi, "Manages users and profiles", "HTTPS/REST")
+Rel(houseManagement, userApi, "Validates user ownership", "HTTP/REST")
+
+' Initial data requests from other services (startup only)
+Rel(deviceControl, userApi, "Initial permissions load", "HTTP/REST", $tags="startup")
+Rel(scenarioService, userApi, "Initial ownership load", "HTTP/REST", $tags="startup")
+
+' Internal component interactions
+Rel(userApi, authManager, "Authenticates users", "Java interfaces")
+Rel(userApi, profileManager, "Manages profiles", "Java interfaces")
+Rel(userApi, permissionManager, "Validates permissions", "Java interfaces")
+Rel(authManager, permissionManager, "Checks access rights", "Java interfaces")
+Rel(authManager, sessionCacheManager, "Manages sessions", "Java interfaces")
+Rel(profileManager, permissionManager, "Gets user permissions", "Java interfaces")
+
+' CRITICAL: All changes trigger events
+Rel(authManager, userEventPublisher, "Publishes auth events", "Java interfaces")
+Rel(profileManager, userEventPublisher, "Publishes profile changes", "Java interfaces")
+Rel(permissionManager, userEventPublisher, "Publishes ALL permission changes", "Java interfaces")
+
+' Data storage
+Rel(authManager, userDb, "Stores auth data", "SQL/JPA")
+Rel(profileManager, userDb, "Stores user profiles", "SQL/JPA")
+Rel(permissionManager, userDb, "Stores permissions", "SQL/JPA")
+
+' Simplified cache storage
+Rel(sessionCacheManager, sharedCache, "Stores sessions/tokens", "Redis Protocol")
+
+' Event publishing - Critical for system resilience
+Rel(userEventPublisher, messageBroker, "Publishes ALL user/permission events", "AMQP")
+
+@enduml 

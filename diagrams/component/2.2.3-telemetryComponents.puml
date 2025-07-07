@@ -1,0 +1,70 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Component Diagram - Telemetry Service (Monitoring Context - Simplified Caching)
+
+Container(apiGateway, "API Gateway", "Kong/NGINX", "Routes requests to microservices")
+Container(deviceRegistry, "Device Registry Service", "Go", "Device metadata validation")
+Container(scenarioService, "Scenario Service", "Java Spring Boot", "Reads sensor data for rules")
+Container(houseManagement, "House Management Service", "Java Spring Boot", "Location management (startup sync only)")
+
+System_Ext(smartDevices, "Smart Devices", "IoT sensors and measuring devices")
+
+Container_Boundary(telemetryService, "Telemetry Service") {
+    Component(telemetryApi, "Telemetry API", "Gin Framework", "REST API for telemetry data\n- Data query endpoints\n- Real-time data streams\n- Historical data access\n- Analytics endpoints")
+    
+    Component(dataCollector, "Data Collector", "Go", "Sensor data collection\n- MQTT data ingestion\n- Data validation\n- Protocol handling\n- Data normalization")
+    
+    Component(locationCacheManager, "Location Cache Manager", "Go", "Shared cache management\n- Device-location mappings\n- Location metadata lookup\n- Simple cache operations\n- Fallback to API calls")
+    
+    Component(timeseriesProcessor, "Time-series Processor", "Go", "Time-series data processing\n- Data aggregation\n- Data compression\n- Anomaly detection\n- Data retention policies")
+    
+    Component(analyticsEngine, "Analytics Engine", "Go", "Basic analytics and insights\n- Statistical analysis\n- Trend detection\n- Alert generation\n- Data quality metrics")
+    
+    Component(telemetryEventPublisher, "Event Publisher", "Go", "Event publishing to message broker\n- Measurement events\n- Threshold alerts\n- Anomaly events\n- Analytics insights")
+    
+    Component(eventSubscriber, "Event Subscriber", "Go", "Event subscription and processing\n- Location update events\n- Device registration events\n- Cache invalidation\n- Event filtering")
+}
+
+ContainerDb(telemetryDb, "Telemetry Database", "InfluxDB", "Time-series measurement data, sensor history")
+ContainerDb(sharedCache, "Shared Cache", "Redis", "Sessions, permissions, frequently accessed data")
+Container(messageBroker, "Message Broker", "RabbitMQ", "Event streaming and cache updates")
+
+' External interactions
+Rel(apiGateway, telemetryApi, "Queries telemetry data", "HTTPS/REST")
+Rel(scenarioService, telemetryApi, "Reads sensor data", "HTTP/REST")
+Rel(telemetryApi, deviceRegistry, "Validates device metadata", "HTTP/REST")
+
+' Startup sync only
+Rel(telemetryApi, houseManagement, "Initial location cache load", "HTTP/REST", $tags="startup")
+
+' Internal component interactions
+Rel(telemetryApi, timeseriesProcessor, "Queries processed data", "Go interfaces")
+Rel(telemetryApi, analyticsEngine, "Gets analytics", "Go interfaces")
+Rel(dataCollector, timeseriesProcessor, "Sends raw data", "Go interfaces")
+Rel(dataCollector, locationCacheManager, "Validates device location", "Go interfaces")
+Rel(timeseriesProcessor, analyticsEngine, "Sends processed data", "Go interfaces")
+Rel(timeseriesProcessor, locationCacheManager, "Gets location context", "Go interfaces")
+Rel(dataCollector, telemetryEventPublisher, "Publishes measurement events", "Go interfaces")
+Rel(analyticsEngine, telemetryEventPublisher, "Publishes analytics events", "Go interfaces")
+
+' Data storage
+Rel(timeseriesProcessor, telemetryDb, "Stores time-series data", "InfluxDB Line Protocol")
+Rel(analyticsEngine, telemetryDb, "Queries historical data", "InfluxDB Query Language")
+
+' Simplified cache access
+Rel(locationCacheManager, sharedCache, "Reads/writes cached data", "Redis Protocol")
+
+' Device communication
+Rel(smartDevices, dataCollector, "Sends sensor data", "MQTT/CoAP")
+
+' Event publishing
+Rel(telemetryEventPublisher, messageBroker, "Publishes telemetry events", "AMQP")
+
+' Event subscription for cache updates
+Rel(messageBroker, eventSubscriber, "Receives location/device events", "AMQP")
+Rel(eventSubscriber, locationCacheManager, "Invalidates/updates cache", "Go interfaces")
+
+@enduml 

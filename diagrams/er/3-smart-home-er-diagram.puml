@@ -1,0 +1,287 @@
+@startuml 3-smart-home-er-diagram
+
+' hide the spot
+hide circle
+' avoid problems with angled crows feet
+skinparam linetype ortho
+' improve readability
+skinparam packageStyle rectangle
+skinparam backgroundColor white
+skinparam packageBackgroundColor lightblue
+skinparam entityBackgroundColor white
+
+title Smart Home System - Distributed ER Diagram (MVP Simplified Caching)
+note as title_note
+Microservices Architecture with Database per Service Pattern
+Each package represents a separate microservice with its own database
+Dotted lines show logical relationships (no physical FK constraints)
+Simplified caching: Device Control Redis + Shared Redis only
+end note
+
+' ===== USER CONTEXT (User Management Service) =====
+package "User Context\n(Java Spring Boot + PostgreSQL)" as user_pkg {
+  entity "User" as user {
+    *user_id : UUID <<PK>>
+    --
+    *username : VARCHAR(50)
+    *email : VARCHAR(100)
+    *password_hash : VARCHAR(255)
+    first_name : VARCHAR(50)
+    last_name : VARCHAR(50)
+    phone : VARCHAR(20)
+    is_active : BOOLEAN
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    last_login : TIMESTAMP
+  }
+
+  entity "Role" as role {
+    *role_id : UUID <<PK>>
+    --
+    *role_name : VARCHAR(50)
+    description : TEXT
+    permissions : JSONB
+    created_at : TIMESTAMP
+  }
+
+  entity "UserRole" as user_role {
+    *user_role_id : UUID <<PK>>
+    --
+    *user_id : UUID <<FK>>
+    *role_id : UUID <<FK>>
+    assigned_at : TIMESTAMP
+    assigned_by : UUID
+  }
+}
+
+' ===== HOUSE CONTEXT (House Management Service) =====
+package "House Context\n(Java Spring Boot + PostgreSQL)" as house_pkg {
+  entity "House" as house {
+    *house_id : UUID <<PK>>
+    --
+    *owner_id : UUID <<ref:User>>
+    *house_name : VARCHAR(100)
+    address : TEXT
+    city : VARCHAR(100)
+    postal_code : VARCHAR(20)
+    country : VARCHAR(50)
+    timezone : VARCHAR(50)
+    house_type : VARCHAR(30)
+    total_area : DECIMAL(10,2)
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+  }
+
+  entity "Location" as location {
+    *location_id : UUID <<PK>>
+    --
+    *house_id : UUID <<FK>>
+    *location_name : VARCHAR(100)
+    location_type : VARCHAR(50)
+    floor_number : INTEGER
+    area : DECIMAL(8,2)
+    description : TEXT
+    is_active : BOOLEAN
+    created_at : TIMESTAMP
+  }
+
+  entity "AccessPermission" as access_permission {
+    *permission_id : UUID <<PK>>
+    --
+    *user_id : UUID <<ref:User>>
+    *house_id : UUID <<FK>>
+    location_id : UUID <<FK>>
+    *permission_type : VARCHAR(30)
+    granted_by : UUID <<ref:User>>
+    granted_at : TIMESTAMP
+    expires_at : TIMESTAMP
+    is_active : BOOLEAN
+  }
+}
+
+' ===== DEVICE CONTEXT (Device Registry Service) =====
+package "Device Context\n(Go + PostgreSQL)" as device_pkg {
+  entity "DeviceType" as device_type {
+    *type_id : UUID <<PK>>
+    --
+    *type_name : VARCHAR(100)
+    *category : VARCHAR(50)
+    manufacturer : VARCHAR(100)
+    model : VARCHAR(100)
+    protocol : VARCHAR(30)
+    capabilities : JSONB
+    default_config : JSONB
+    is_active : BOOLEAN
+    created_at : TIMESTAMP
+  }
+
+  entity "Device" as device {
+    *device_id : UUID <<PK>>
+    --
+    *type_id : UUID <<FK>>
+    *house_id : UUID <<ref:House>>
+    *location_id : UUID <<ref:Location>>
+    *registered_by : UUID <<ref:User>>
+    *device_name : VARCHAR(100)
+    *serial_number : VARCHAR(100) <<UK>>
+    mac_address : VARCHAR(17)
+    ip_address : INET
+    firmware_version : VARCHAR(50)
+    configuration : JSONB
+    installation_date : DATE
+    warranty_expires : DATE
+    is_online : BOOLEAN
+    last_seen : TIMESTAMP
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+  }
+}
+
+' ===== CONTROL CONTEXT (Device Control Service) =====
+' Note: This service uses Redis for state management
+package "Control Context\n(Go + Redis)" as control_pkg {
+  note as control_note
+    Device Control Service uses dedicated Redis
+    for real-time device state management.
+    Critical for command processing performance.
+  end note
+}
+
+' ===== MONITORING CONTEXT (Telemetry Service) =====
+package "Monitoring Context\n(Go + InfluxDB)" as monitoring_pkg {
+  entity "TelemetryData" as telemetry_data {
+    *measurement_id : UUID <<PK>>
+    --
+    *device_id : UUID <<ref:Device>>
+    *house_id : UUID <<ref:House>>
+    *location_id : UUID <<ref:Location>>
+    *measurement_type : VARCHAR(50)
+    *value : DOUBLE PRECISION
+    unit : VARCHAR(20)
+    quality : VARCHAR(20)
+    *timestamp : TIMESTAMP
+    tags : JSONB
+    metadata : JSONB
+  }
+
+  entity "DeviceMetrics" as device_metrics {
+    *metric_id : UUID <<PK>>
+    --
+    *device_id : UUID <<ref:Device>>
+    *house_id : UUID <<ref:House>>
+    *metric_name : VARCHAR(100)
+    *metric_value : DOUBLE PRECISION
+    aggregation_period : VARCHAR(20)
+    *calculated_at : TIMESTAMP
+    *period_start : TIMESTAMP
+    *period_end : TIMESTAMP
+  }
+}
+
+' ===== AUTOMATION CONTEXT (Scenario Service) =====
+package "Automation Context\n(Java Spring Boot + PostgreSQL)" as automation_pkg {
+  entity "Scenario" as scenario {
+    *scenario_id : UUID <<PK>>
+    --
+    *house_id : UUID <<ref:House>>
+    *created_by : UUID <<ref:User>>
+    *scenario_name : VARCHAR(100)
+    description : TEXT
+    is_active : BOOLEAN
+    priority : INTEGER
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+    last_executed : TIMESTAMP
+    execution_count : INTEGER
+  }
+
+  entity "Rule" as rule {
+    *rule_id : UUID <<PK>>
+    --
+    *scenario_id : UUID <<FK>>
+    *house_id : UUID <<ref:House>>
+    location_id : UUID <<ref:Location>>
+    *rule_name : VARCHAR(100)
+    *rule_type : VARCHAR(30)
+    *conditions : JSONB
+    *actions : JSONB
+    is_active : BOOLEAN
+    execution_order : INTEGER
+    created_at : TIMESTAMP
+  }
+
+  entity "ScenarioExecution" as scenario_execution {
+    *execution_id : UUID <<PK>>
+    --
+    *scenario_id : UUID <<FK>>
+    rule_id : UUID <<FK>>
+    triggered_by_device : UUID <<ref:Device>>
+    *house_id : UUID <<ref:House>>
+    *execution_status : VARCHAR(30)
+    *started_at : TIMESTAMP
+    completed_at : TIMESTAMP
+    trigger_data : JSONB
+    execution_log : JSONB
+    error_message : TEXT
+  }
+}
+
+' ===== RELATIONSHIPS =====
+
+' Internal Relationships (Physical FK within same context)
+user ||--o{ user_role : "user_id"
+role ||--o{ user_role : "role_id"
+house ||--o{ location : "house_id"
+house ||--o{ access_permission : "house_id"
+location |o--o{ access_permission : "location_id"
+device_type ||--o{ device : "type_id"
+scenario ||--o{ rule : "scenario_id"
+scenario ||--o{ scenario_execution : "scenario_id"
+rule |o--o{ scenario_execution : "rule_id"
+
+' Cross-Context Relationships (Logical references - dotted lines)
+user ..o{ house : "owner_id\n(cached in Shared Redis)"
+user ..o{ access_permission : "user_id\n(cached in Shared Redis)"
+user ..o{ device : "registered_by\n(cached in Shared Redis)"
+user ..o{ scenario : "created_by\n(cached in Shared Redis)"
+
+house ..o{ device : "house_id\n(cached in Shared Redis)"
+location ..o{ device : "location_id\n(cached in Shared Redis)"
+house ..o{ telemetry_data : "house_id\n(cached in Shared Redis)"
+location ..o{ telemetry_data : "location_id\n(cached in Shared Redis)"
+house ..o{ device_metrics : "house_id\n(cached in Shared Redis)"
+house ..o{ scenario : "house_id\n(cached in Shared Redis)"
+house ..o{ rule : "house_id\n(cached in Shared Redis)"
+location ..o{ rule : "location_id\n(cached in Shared Redis)"
+house ..o{ scenario_execution : "house_id\n(cached in Shared Redis)"
+
+device ..o{ telemetry_data : "device_id\n(validated via API)"
+device ..o{ device_metrics : "device_id\n(validated via API)"
+device ..o{ scenario_execution : "triggered_by\n(event-driven)"
+
+' Layout hints
+user_pkg -[hidden]right-> house_pkg
+house_pkg -[hidden]right-> device_pkg
+device_pkg -[hidden]down-> control_pkg
+control_pkg -[hidden]left-> monitoring_pkg
+monitoring_pkg -[hidden]left-> automation_pkg
+
+note bottom
+**Legend:**
+* = Mandatory field
+<<PK>> = Primary Key
+<<FK>> = Foreign Key (only within same service)
+<<UK>> = Unique Key
+<<ref:Entity>> = Logical reference to entity in another service
+
+**Solid lines (—):** Physical FK constraints within same database
+**Dotted lines (...):** Logical references validated via API or cached
+
+**Simplified Caching Strategy for MVP:**
+- Device Control Redis: Real-time device states and commands
+- Shared Redis: Sessions, permissions, frequently accessed data
+- Event-driven cache updates via RabbitMQ
+- No over-engineered per-service Redis instances
+end note
+
+@enduml

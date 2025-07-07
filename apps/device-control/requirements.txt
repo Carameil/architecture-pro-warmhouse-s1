@@ -1,0 +1,27 @@
+# Core dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Redis client
+redis==5.0.1
+fakeredis==2.20.0  # For testing
+
+# HTTP client for Device Registry API
+httpx==0.25.2
+
+# RabbitMQ client (for future integration)
+aio-pika==9.3.1
+
+# Utilities
+python-json-logger==2.0.7
+python-dotenv==1.0.0
+
+# Development dependencies
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.1

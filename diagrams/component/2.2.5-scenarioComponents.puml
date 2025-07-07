@@ -1,0 +1,65 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Component Diagram - Scenario Service (Scenario Context - MVP with Simplified Caching)
+
+Container(apiGateway, "API Gateway", "Kong/NGINX", "Routes requests to microservices")
+Container(deviceControl, "Device Control Service", "Go", "Executes device commands")
+Container(telemetryService, "Telemetry Service", "Go", "Provides sensor data")
+Container(userManagement, "User Management Service", "Java Spring Boot", "User management (startup sync only)")
+Container(houseManagement, "House Management Service", "Java Spring Boot", "House management (startup sync only)")
+
+Container_Boundary(scenarioService, "Scenario Service") {
+    Component(scenarioApi, "Scenario API", "Spring Boot", "REST API for scenario management\n- Scenario CRUD operations\n- Trigger management\n- Automation rules\n- Scenario execution control")
+    
+    Component(ownershipCacheManager, "Ownership Cache Manager", "Java", "Shared cache management\n- User ownership lookup\n- House access validation\n- Simple cache operations\n- Fallback to API calls")
+    
+    Component(ruleEngine, "Rule Engine", "Java", "Core automation rule processing\n- Condition evaluation\n- Rule execution logic\n- Complex scenario workflows\n- Rule priority management")
+    
+    Component(triggerManager, "Trigger Manager", "Java", "Trigger and condition management\n- Event-based triggers\n- Time-based triggers\n- Sensor threshold triggers\n- Complex condition logic")
+    
+    Component(actionExecutor, "Action Executor", "Java", "Scenario action execution\n- Device command execution\n- Notification actions\n- Multi-step actions\n- Action rollback")
+    
+    Component(eventSubscriber, "Event Subscriber", "Java", "Event subscription and processing\n- Device state events\n- Telemetry events\n- Permission update events\n- System events")
+}
+
+ContainerDb(scenarioDb, "Scenario Database", "PostgreSQL", "Automation rules, triggers, conditions, user scenarios")
+ContainerDb(sharedCache, "Shared Cache", "Redis", "Sessions, permissions, frequently accessed data")
+Container(messageBroker, "Message Broker", "RabbitMQ", "Event streaming and cache updates")
+
+' External interactions
+Rel(apiGateway, scenarioApi, "Manages automation scenarios", "HTTPS/REST")
+
+' Startup sync only
+Rel(scenarioApi, userManagement, "Initial ownership cache load", "HTTP/REST", $tags="startup")
+Rel(scenarioApi, houseManagement, "Initial house access load", "HTTP/REST", $tags="startup")
+
+' Internal component interactions
+Rel(scenarioApi, ruleEngine, "Manages automation rules", "Java interfaces")
+Rel(scenarioApi, triggerManager, "Manages triggers", "Java interfaces")
+Rel(scenarioApi, ownershipCacheManager, "Validates ownership", "Java interfaces")
+Rel(ruleEngine, triggerManager, "Evaluates conditions", "Java interfaces")
+Rel(ruleEngine, actionExecutor, "Executes actions", "Java interfaces")
+Rel(ruleEngine, ownershipCacheManager, "Validates access rights", "Java interfaces")
+Rel(triggerManager, ruleEngine, "Triggers rule evaluation", "Java interfaces")
+Rel(eventSubscriber, triggerManager, "Processes trigger events", "Java interfaces")
+
+' Cross-service interactions for action execution
+Rel(actionExecutor, deviceControl, "Triggers device actions", "HTTP/REST")
+Rel(actionExecutor, telemetryService, "Reads current sensor data", "HTTP/REST")
+
+' Data storage
+Rel(ruleEngine, scenarioDb, "Stores automation rules", "SQL/JPA")
+Rel(triggerManager, scenarioDb, "Stores triggers", "SQL/JPA")
+Rel(actionExecutor, scenarioDb, "Logs action execution", "SQL/JPA")
+
+' Simplified cache access
+Rel(ownershipCacheManager, sharedCache, "Reads/writes cached data", "Redis Protocol")
+
+' Event processing
+Rel(messageBroker, eventSubscriber, "Receives trigger/permission events", "AMQP")
+Rel(eventSubscriber, ownershipCacheManager, "Invalidates/updates cache", "Java interfaces")
+
+@enduml 

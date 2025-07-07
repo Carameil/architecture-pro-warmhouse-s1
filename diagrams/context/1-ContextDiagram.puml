@@ -1,0 +1,50 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+!define DEVICONS https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/devicons
+!define FONTAWESOME https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/font-awesome-5
+!include DEVICONS/go.puml
+!include DEVICONS/postgresql.puml
+!include FONTAWESOME/users.puml
+!include FONTAWESOME/temperature_high.puml
+!include FONTAWESOME/cloud.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Context Diagram - Smart Home Monolith (As-Is)
+
+Person(homeowner, "Homeowner", "End user who manages home heating and monitors temperature remotely", $sprite="users")
+Person(admin, "System Administrator", "Manages system configuration and monitoring", $sprite="users")
+
+System_Boundary(smartHomeSystem, "Smart Home Ecosystem") {
+    System(monolith, "Smart Home Monolith", "Go application that manages temperature sensors and provides REST API for remote heating control", $sprite="go")
+}
+
+System_Ext(temperatureAPI, "External Temperature API", "Third-party service providing real-time temperature data by location", $sprite="cloud")
+System_Ext(temperatureSensors, "Temperature Sensors", "Physical IoT devices (100 units) installed in homes for temperature monitoring", $sprite="temperature_high")
+SystemDb_Ext(database, "PostgreSQL Database", "Stores sensor data, configurations and system state", $sprite="postgresql")
+
+Rel(homeowner, monolith, "Manages sensors, views temperature data", "HTTPS/REST API")
+Rel(admin, monolith, "Monitors system health, manages configuration", "HTTPS/REST API")
+Rel(monolith, temperatureAPI, "Fetches current temperature by location", "HTTPS")
+Rel(temperatureSensors, monolith, "Reports temperature readings", "HTTP")
+Rel(monolith, database, "Stores/retrieves sensor data", "SQL/TCP")
+
+note right of monolith
+  **Current Functionality:**
+  - CRUD operations for temperature sensors
+  - Real-time temperature monitoring  
+  - Integration with external temperature API
+  - Health monitoring endpoint
+  - Synchronous request processing only
+end note
+
+note left of temperatureSensors
+  **Sensor Locations:**
+  - Living Room (ID: 1)
+  - Bedroom (ID: 2)  
+  - Kitchen (ID: 3)
+  - Status: active/inactive
+end note
+
+@enduml

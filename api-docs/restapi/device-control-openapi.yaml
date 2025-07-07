@@ -1,0 +1,550 @@
+openapi: 3.0.3
+info:
+  title: Device Control Service API
+  description: |
+    Real-time device control and state management for Smart Home system.
+    **Task examples**: "Update device state", "Send command to device"
+  version: 1.0.0
+  contact:
+    name: Smart Home Team
+    email: dev@warmhouse.com
+
+servers:
+  - url: http://localhost:8083/api/v1
+    description: Development server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /devices/{deviceId}/state:
+    get:
+      summary: Get device state
+      description: |
+        Get current state of the device.
+        **Task requirement**: "Getting device information"
+      tags:
+        - Device State
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+      responses:
+        '200':
+          description: Device state retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceState'
+              example:
+                device_id: "550e8400-e29b-41d4-a716-446655440001"
+                status: "online"
+                properties:
+                  temperature: 23.5
+                  humidity: 45
+                  battery_level: 85
+                last_updated: "2024-12-20T15:30:00Z"
+                is_responsive: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      summary: Update device state
+      description: |
+        Update the current state of the device.
+        **Task requirement**: "Update device state"
+      tags:
+        - Device State
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceStateUpdate'
+            example:
+              status: "online"
+              properties:
+                temperature: 24.1
+                humidity: 47
+                battery_level: 82
+      responses:
+        '200':
+          description: Device state updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceState'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /devices/{deviceId}/commands:
+    post:
+      summary: Send command to device
+      description: |
+        Send a command to the device for execution.
+        **Task requirement**: "Send command to device"
+      tags:
+        - Device Commands
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCommand'
+            example:
+              command: "set_temperature"
+              parameters:
+                target_temperature: 22.0
+                mode: "heat"
+              priority: "normal"
+              timeout: 30
+      responses:
+        '202':
+          description: Command accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+              example:
+                command_id: "cmd_12345678-abcd-4321-efgh-123456789012"
+                device_id: "550e8400-e29b-41d4-a716-446655440001"
+                command_type: "set_temperature"
+                status: "pending"
+                message: "Temperature control command queued for execution"
+                created_at: "2024-12-20T15:30:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      summary: Get device commands
+      description: Get list of commands for a device with optional status filter
+      tags:
+        - Device Commands
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Filter by command status
+          schema:
+            type: string
+            enum: [pending, executing, completed, failed, cancelled]
+        - name: limit
+          in: query
+          description: Maximum number of commands to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Commands retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommandStatus'
+              example:
+                - command_id: "cmd_12345678-abcd-4321-efgh-123456789012"
+                  device_id: "550e8400-e29b-41d4-a716-446655440001"
+                  status: "completed"
+                  created_at: "2024-12-20T15:30:00Z"
+                  completed_at: "2024-12-20T15:30:25Z"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /devices/{deviceId}/commands/{commandId}:
+    get:
+      summary: Get command status
+      description: Get the execution status of a specific command
+      tags:
+        - Device Commands
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: commandId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Command status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandStatus'
+              example:
+                command_id: "cmd_12345678-abcd-4321-efgh-123456789012"
+                device_id: "550e8400-e29b-41d4-a716-446655440001"
+                status: "completed"
+                result:
+                  success: true
+                  message: "Temperature set to 22.0°C"
+                created_at: "2024-12-20T15:30:00Z"
+                completed_at: "2024-12-20T15:30:25Z"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Cancel command
+      description: Cancel a pending command
+      tags:
+        - Device Commands
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: commandId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Command cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandStatus'
+        '400':
+          description: Command cannot be cancelled (already completed)
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /devices/{deviceId}/ping:
+    post:
+      summary: Ping device
+      description: Send ping command to check device connectivity
+      tags:
+        - Device Commands
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Ping command accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+              example:
+                command_id: "cmd_ping_12345678-abcd-4321-efgh-123456789012"
+                device_id: "550e8400-e29b-41d4-a716-446655440001"
+                command_type: "ping"
+                status: "pending"
+                created_at: "2024-12-20T15:30:00Z"
+                message: "Ping command sent to device"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /devices/{deviceId}/process-queue:
+    post:
+      summary: Process device command queue
+      description: Process pending commands for a device (for testing purposes)
+      tags:
+        - Device Commands
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Queue processing initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Processing command queue for device"
+                  processed_count:
+                    type: integer
+                    example: 3
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /health:
+    get:
+      summary: Health check
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  redis_status:
+                    type: string
+                    example: "connected"
+                  mqtt_status:
+                    type: string
+                    example: "connected"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    DeviceState:
+      type: object
+      description: Current state of a device (stored in Redis)
+      required:
+        - device_id
+        - status
+        - last_updated
+      properties:
+        device_id:
+          type: string
+          format: uuid
+          description: Device identifier
+        status:
+          type: string
+          enum: [online, offline, error, maintenance]
+          description: Device status
+        properties:
+          type: object
+          description: Device-specific properties (temperature, brightness, etc.)
+          additionalProperties: true
+        last_updated:
+          type: string
+          format: date-time
+          description: Last state update timestamp
+        is_responsive:
+          type: boolean
+          description: Whether device responds to ping
+
+    DeviceStateUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [online, offline, error, maintenance]
+        properties:
+          type: object
+          additionalProperties: true
+
+    DeviceCommand:
+      type: object
+      description: Command to be sent to device
+      required:
+        - command
+      properties:
+        command:
+          type: string
+          description: Command name
+          example: "set_temperature"
+        parameters:
+          type: object
+          description: Command parameters
+          additionalProperties: true
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+          default: normal
+          description: Command priority
+        timeout:
+          type: integer
+          minimum: 1
+          maximum: 300
+          default: 30
+          description: Timeout in seconds
+
+    CommandResponse:
+      type: object
+      description: Response when command is accepted
+      properties:
+        command_id:
+          type: string
+          format: uuid
+          description: Unique command identifier
+        device_id:
+          type: string
+          format: uuid
+          description: Target device identifier
+        command_type:
+          type: string
+          description: Type of command that was executed
+        status:
+          type: string
+          enum: [pending, executing, completed, failed, cancelled]
+          description: Command status
+        message:
+          type: string
+          description: Human-readable status message
+        created_at:
+          type: string
+          format: date-time
+          description: Command creation timestamp
+
+    CommandStatus:
+      type: object
+      description: Current status of a command
+      properties:
+        command_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, processing, completed, failed, cancelled]
+        result:
+          type: object
+          description: Command execution result
+          properties:
+            success:
+              type: boolean
+            message:
+              type: string
+            data:
+              type: object
+              additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        error_message:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Device not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+tags:
+  - name: Device State
+    description: Device state management operations
+  - name: Device Commands
+    description: Device command operations
+
+  - name: Health
+    description: Service health monitoring 

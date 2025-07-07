@@ -3,33 +3,296 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: smarthome-postgres
-  ## тут нужно добавить настройки
+    container_name: ${POSTGRES_CONTAINER}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./db_volumes/postgres_data:/var/lib/postgresql/data
+      - ./smart_home/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   temperature-api:
-  ## тут нужно добавить приложение
+    build:
+      context: ./temperature-api
+      dockerfile: Dockerfile
+      args:
+        APP_ENV: ${APP_ENV}
+    container_name: ${TEMPERATURE_API_CONTAINER}
+    working_dir: /var/www/html
+    volumes:
+      - ./temperature-api/app:/var/www/html
+    environment:
+      - APP_ENV=${APP_ENV}
+      - APP_DEBUG=${APP_DEBUG}
+    ports:
+      - "${TEMPERATURE_API_PORT}:8081"
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   app:
     build:
       context: ./smart_home
       dockerfile: Dockerfile
-    container_name: smarthome-app
+    container_name: ${SMART_HOME_CONTAINER}
     depends_on:
       postgres:
         condition: service_healthy
       temperature-api:
-        condition: service_started
+        condition: service_healthy
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/smarthome
-      - TEMPERATURE_API_URL=http://temperature-api:8081
+      - DATABASE_URL=${DATABASE_URL}
+      - TEMPERATURE_API_URL=${TEMPERATURE_API_URL}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
     ports:
-      - "8080:8080"
+      - "${SMART_HOME_PORT}:8080"
     restart: unless-stopped
     networks:
       - smarthome-network
 
-volumes:
-  postgres_data:
+  # NEW MICROSERVICES INFRASTRUCTURE
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ${RABBITMQ_CONTAINER:-smarthome-rabbitmq}
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin123}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - ./db_volumes/rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for Device Control Service
+  redis-device-control:
+    image: redis:7-alpine
+    container_name: ${REDIS_DEVICE_CONTROL_CONTAINER:-redis-device-control}
+    command: redis-server --requirepass ${REDIS_DEVICE_CONTROL_PASSWORD:-redis123} --port 6379
+    ports:
+      - "${REDIS_DEVICE_CONTROL_PORT:-6379}:6379"
+    volumes:
+      - ./db_volumes/redis_device_control_data:/data
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for Shared Cache
+  redis-shared:
+    image: redis:7-alpine
+    container_name: ${REDIS_SHARED_CONTAINER:-smarthome-redis-shared}
+    command: redis-server --requirepass ${REDIS_SHARED_PASSWORD:-redis456} --port 6379
+    ports:
+      - "${REDIS_SHARED_PORT:-6380}:6379"
+    volumes:
+      - ./db_volumes/redis_shared_data:/data
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL for Device Registry Service
+  postgres-device-registry:
+    image: postgres:16-alpine
+    container_name: ${DEVICE_REGISTRY_POSTGRES_CONTAINER:-device-registry-postgres}
+    environment:
+      POSTGRES_DB: ${DEVICE_REGISTRY_DB_NAME:-device_registry}
+      POSTGRES_USER: ${DEVICE_REGISTRY_DB_USER:-device_registry}
+      POSTGRES_PASSWORD: ${DEVICE_REGISTRY_DB_PASSWORD:-device123}
+    volumes:
+      - ./db_volumes/device_registry_postgres_data:/var/lib/postgresql/data
+      - ./device-registry/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${DEVICE_REGISTRY_POSTGRES_PORT:-5433}:5432"
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DEVICE_REGISTRY_DB_USER:-device_registry}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # InfluxDB for Telemetry Service
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: ${INFLUXDB_CONTAINER:-telemetry-influxdb}
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USER:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD:-influx123}
+      DOCKER_INFLUXDB_INIT_ORG: smart-home
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_DB:-telemetry}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: smart-home-telemetry-token
+    ports:
+      - "${INFLUXDB_PORT:-8086}:8086"
+    volumes:
+      - ./db_volumes/influxdb_data:/var/lib/influxdb2
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Device Registry Service (Go)
+  device-registry:
+    build:
+      context: ./device-registry
+      dockerfile: Dockerfile
+    container_name: ${DEVICE_REGISTRY_CONTAINER:-device-registry}
+    depends_on:
+      postgres-device-registry:
+        condition: service_healthy
+      redis-shared:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - DEVICE_REGISTRY_DB_HOST=${DEVICE_REGISTRY_DB_HOST:-postgres-device-registry}
+      - DEVICE_REGISTRY_POSTGRES_PORT=5432
+      - DEVICE_REGISTRY_DB_USER=${DEVICE_REGISTRY_DB_USER:-device_registry}
+      - DEVICE_REGISTRY_DB_PASSWORD=${DEVICE_REGISTRY_DB_PASSWORD:-device123}
+      - DEVICE_REGISTRY_DB_NAME=${DEVICE_REGISTRY_DB_NAME:-device_registry}
+      - DEVICE_REGISTRY_PORT=${DEVICE_REGISTRY_PORT:-8082}
+      # RabbitMQ Configuration
+      - RABBITMQ_HOST=${RABBITMQ_HOST:-smarthome-rabbitmq}
+      - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-admin123}
+    ports:
+      - "${DEVICE_REGISTRY_PORT:-8082}:8082"
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Device Control Service (Python FastAPI)
+  device-control:
+    build:
+      context: ./device-control
+      dockerfile: Dockerfile
+    container_name: ${DEVICE_CONTROL_CONTAINER:-device-control}
+    depends_on:
+      redis-device-control:
+        condition: service_healthy
+      device-registry:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - DEVICE_CONTROL_HOST=0.0.0.0
+      - DEVICE_CONTROL_PORT=${DEVICE_CONTROL_PORT:-8083}
+      - DEVICE_CONTROL_REDIS_HOST=${DEVICE_CONTROL_REDIS_HOST:-redis-device-control}
+      - DEVICE_CONTROL_REDIS_PORT=6379
+      - DEVICE_CONTROL_REDIS_PASSWORD=${REDIS_DEVICE_CONTROL_PASSWORD:-redis123}
+      - DEVICE_REGISTRY_URL=http://device-registry:8082
+      - RABBITMQ_HOST=${RABBITMQ_HOST:-smarthome-rabbitmq}
+      - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-admin123}
+    ports:
+      - "${DEVICE_CONTROL_PORT:-8083}:8083"
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8083/api/v1/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Telemetry Service (Java Spring Boot)
+  telemetry-service:
+    build:
+      context: ./telemetry-service
+      dockerfile: Dockerfile
+    container_name: ${TELEMETRY_CONTAINER:-telemetry-service}
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      redis-shared:
+        condition: service_healthy
+      device-registry:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - TELEMETRY_PORT=${TELEMETRY_PORT:-8084}
+      - LOG_LEVEL=${TELEMETRY_LOG_LEVEL:-INFO}
+      # InfluxDB Configuration
+      - INFLUXDB_URL=http://telemetry-influxdb:8086
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-smart-home-telemetry-token}
+      - INFLUXDB_ORG=${INFLUXDB_ORG:-smart-home}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET:-telemetry}
+      - INFLUXDB_RETENTION=${INFLUXDB_RETENTION:-30d}
+      # Redis Configuration
+      - REDIS_SHARED_HOST=${REDIS_SHARED_HOST:-smarthome-redis-shared}
+      - REDIS_SHARED_PORT=6379
+      - REDIS_SHARED_PASSWORD=${REDIS_SHARED_PASSWORD:-redis456}
+      # RabbitMQ Configuration
+      - RABBITMQ_HOST=${RABBITMQ_HOST:-smarthome-rabbitmq}
+      - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
+      - RABBITMQ_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-admin123}
+      # Device Registry Service
+      - DEVICE_REGISTRY_URL=http://device-registry:8082
+    ports:
+      - "${TELEMETRY_PORT:-8084}:8084"
+    restart: unless-stopped
+    networks:
+      - smarthome-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 networks:
   smarthome-network:

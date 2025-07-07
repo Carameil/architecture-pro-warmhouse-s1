@@ -1,0 +1,563 @@
+openapi: 3.0.3
+info:
+  title: Device Registry Service API
+  description: Device catalog management and registration for Smart Home system
+  version: 1.0.0
+  contact:
+    name: Smart Home Team
+    email: dev@warmhouse.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8082/api/v1
+    description: Development server
+  - url: https://api.warmhouse.com/device-registry/v1
+    description: Production server
+
+security:
+  - BearerAuth: []
+
+paths:
+  /devices:
+    get:
+      summary: Get devices list
+      description: Returns list of registered devices with filtering
+      tags:
+        - Devices
+      parameters:
+        - name: house_id
+          in: query
+          description: Filter by house ID
+          schema:
+            type: string
+            format: uuid
+        - name: type_id
+          in: query
+          description: Filter by device type ID
+          schema:
+            type: string
+            format: uuid
+        - name: is_online
+          in: query
+          description: Filter by online status
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Devices list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  devices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+              example:
+                devices:
+                  - device_id: "550e8400-e29b-41d4-a716-446655440001"
+                    type_id: "550e8400-e29b-41d4-a716-446655440010"
+                    house_id: "550e8400-e29b-41d4-a716-446655440020"
+                    location_id: "550e8400-e29b-41d4-a716-446655440030"
+                    device_name: "Living Room Temperature Sensor"
+                    serial_number: "LR_TEMP_001"
+                    is_online: true
+                    legacy_sensor_id: 12345
+                    created_at: "2024-12-20T10:30:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Register new device
+      description: |
+        Register a new device in the system.
+        **Task requirement**: "Getting device information"
+      tags:
+        - Devices
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCreateRequest'
+            example:
+              type_id: "550e8400-e29b-41d4-a716-446655440010"
+              house_id: "550e8400-e29b-41d4-a716-446655440020"
+              location_id: "550e8400-e29b-41d4-a716-446655440030"
+              registered_by: "550e8400-e29b-41d4-a716-446655440040"
+              device_name: "Kitchen Temperature Sensor"
+              serial_number: "KITCHEN_TEMP_001"
+              mac_address: "AA:BB:CC:DD:EE:FF"
+      responses:
+        '201':
+          description: Device registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Device with this serial number already exists
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /devices/{deviceId}:
+    get:
+      summary: Get device information
+      description: |
+        Get detailed information about specific device.
+        **Task requirement**: "Getting device information"
+      tags:
+        - Devices
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Device information retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              example:
+                device_id: "550e8400-e29b-41d4-a716-446655440001"
+                type_id: "550e8400-e29b-41d4-a716-446655440010"
+                house_id: "550e8400-e29b-41d4-a716-446655440020"
+                location_id: "550e8400-e29b-41d4-a716-446655440030"
+                registered_by: "550e8400-e29b-41d4-a716-446655440040"
+                device_name: "Living Room Temperature Sensor"
+                serial_number: "LR_TEMP_001"
+                mac_address: "AA:BB:CC:DD:EE:01"
+                ip_address: "192.168.1.101"
+                firmware_version: "1.2.3"
+                configuration: {"interval": 60, "unit": "celsius"}
+                installation_date: "2024-12-01"
+                is_online: true
+                last_seen: "2024-12-20T15:45:00Z"
+                legacy_sensor_id: 12345
+                created_at: "2024-12-20T10:30:00Z"
+                updated_at: "2024-12-20T15:45:00Z"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      summary: Update device information
+      description: Updates device metadata and configuration
+      tags:
+        - Devices
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          description: Unique device identifier
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceUpdateRequest'
+            example:
+              device_name: "Living Room Temp & Humidity Sensor"
+              configuration:
+                measurement_interval: 45
+                temperature_unit: "celsius"
+                humidity_enabled: true
+      responses:
+        '200':
+          description: Device updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Delete device
+      description: Removes device from system (soft delete)
+      tags:
+        - Devices
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          description: Unique device identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Device deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Device cannot be deleted (active dependencies)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "DEVICE_HAS_DEPENDENCIES"
+                message: "Cannot delete device: active scenarios depend on this device"
+                timestamp: "2024-12-20T10:30:00Z"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /device-types:
+    get:
+      summary: Get device types catalog
+      description: Returns available device types
+      tags:
+        - Device Types
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Device types retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  device_types:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DeviceType'
+              example:
+                device_types:
+                  - type_id: "550e8400-e29b-41d4-a716-446655440010"
+                    type_name: "Temperature Sensor"
+                    category: "sensor"
+                    manufacturer: "Xiaomi"
+                    model: "WSDCGQ01LM"
+                    protocol: "zigbee"
+                    capabilities: {"measurements": ["temperature", "humidity"]}
+                    is_active: true
+                    created_at: "2024-12-01T00:00:00Z"
+
+  /device-types/{typeId}:
+    get:
+      summary: Get device type by ID
+      description: Get detailed information about a specific device type
+      tags:
+        - Device Types
+      parameters:
+        - name: typeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Device type information retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceType'
+              example:
+                type_id: "550e8400-e29b-41d4-a716-446655440010"
+                type_name: "Temperature Sensor"
+                category: "sensor"
+                manufacturer: "Xiaomi"
+                model: "WSDCGQ01LM"
+                protocol: "zigbee"
+                capabilities: {"measurements": ["temperature", "humidity"]}
+                default_config: {"interval": 60}
+                is_active: true
+                created_at: "2024-12-01T00:00:00Z"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /health:
+    get:
+      summary: Health check
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  database_status:
+                    type: string
+                    example: "connected"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Device:
+      type: object
+      description: Device entity as defined in ER diagram
+      required:
+        - device_id
+        - type_id
+        - house_id
+        - location_id
+        - registered_by
+        - device_name
+        - serial_number
+      properties:
+        device_id:
+          type: string
+          format: uuid
+          description: UUID primary key
+        type_id:
+          type: string
+          format: uuid
+          description: Foreign key to DeviceType
+        house_id:
+          type: string
+          format: uuid
+          description: Reference to House entity
+        location_id:
+          type: string
+          format: uuid
+          description: Reference to Location entity
+        registered_by:
+          type: string
+          format: uuid
+          description: Reference to User entity
+        device_name:
+          type: string
+          maxLength: 100
+          description: Device name VARCHAR(100)
+        serial_number:
+          type: string
+          maxLength: 100
+          description: Unique serial number VARCHAR(100)
+        mac_address:
+          type: string
+          maxLength: 17
+          description: MAC address VARCHAR(17)
+        ip_address:
+          type: string
+          format: ipv4
+          description: IP address INET
+        firmware_version:
+          type: string
+          maxLength: 50
+          description: Firmware version VARCHAR(50)
+        configuration:
+          type: object
+          description: Configuration JSONB
+        installation_date:
+          type: string
+          format: date
+          description: Installation date DATE
+        warranty_expires:
+          type: string
+          format: date
+          description: Warranty expiration DATE
+        is_online:
+          type: boolean
+          description: Online status BOOLEAN
+        last_seen:
+          type: string
+          format: date-time
+          description: Last seen timestamp
+        legacy_sensor_id:
+          type: integer
+          nullable: true
+          description: Legacy sensor ID for migration from monolith system
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Update timestamp
+
+    DeviceCreateRequest:
+      type: object
+      required:
+        - type_id
+        - house_id
+        - location_id
+        - registered_by
+        - device_name
+        - serial_number
+      properties:
+        type_id:
+          type: string
+          format: uuid
+        house_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+        registered_by:
+          type: string
+          format: uuid
+        device_name:
+          type: string
+          maxLength: 100
+        serial_number:
+          type: string
+          maxLength: 100
+        mac_address:
+          type: string
+          maxLength: 17
+        configuration:
+          type: object
+
+    DeviceType:
+      type: object
+      description: DeviceType entity as defined in ER diagram
+      required:
+        - type_id
+        - type_name
+        - category
+      properties:
+        type_id:
+          type: string
+          format: uuid
+          description: UUID primary key
+        type_name:
+          type: string
+          maxLength: 100
+          description: Type name VARCHAR(100)
+        category:
+          type: string
+          maxLength: 50
+          description: Category VARCHAR(50)
+        manufacturer:
+          type: string
+          maxLength: 100
+          description: Manufacturer VARCHAR(100)
+        model:
+          type: string
+          maxLength: 100
+          description: Model VARCHAR(100)
+        protocol:
+          type: string
+          maxLength: 30
+          description: Protocol VARCHAR(30)
+        capabilities:
+          type: object
+          description: Capabilities JSONB
+        default_config:
+          type: object
+          description: Default configuration JSONB
+        is_active:
+          type: boolean
+          description: Active status BOOLEAN
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+
+    DeviceUpdateRequest:
+      type: object
+      properties:
+        device_name:
+          type: string
+          description: Updated device name
+          maxLength: 100
+          example: "Living Room Temp & Humidity Sensor"
+        configuration:
+          type: object
+          description: Updated device configuration
+          additionalProperties: true
+          example:
+            measurement_interval: 45
+            humidity_enabled: true
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+tags:
+  - name: Devices
+    description: Device management operations
+  - name: Device Types
+    description: Device types catalog
+  - name: Health
+    description: Service health monitoring 

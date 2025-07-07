@@ -1,0 +1,1060 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-4a3b-8c2d-1e2f3a4b5c6d",
+		"name": "Умный дом: E2E Тесты (Актуализированный)",
+		"description": "Сценарии сквозного тестирования для проекта «Умный дом». Выполняйте запросы по порядку.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "E2E: Полный жизненный цикл устройства",
+			"item": [
+				{
+					"name": "1. Создать сенсор (Инициирует регистрацию устройства)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"pm.collectionVariables.set(\"sensor_id\", jsonData.id);",
+									"console.log(\"Sensor ID set to: \" + jsonData.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Living Room Thermostat\",\n    \"type\": \"temperature\",\n    \"location\": \"Living Room\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/sensors",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"sensors"
+							]
+						},
+						"description": "Создает сенсор в унаследованном монолите. Это действие публикует событие `sensor.created` в RabbitMQ, которое должно быть обработано сервисом `device-registry` для создания нового устройства. Обязательные поля: name, type, location."
+					},
+					"response": []
+				},
+				{
+					"name": "2. Проверить устройство и получить ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"// Find the device that was just created",
+									"var device = jsonData.devices.find(d => d.device_name === 'Living Room Thermostat');",
+									"if (device) {",
+									"    pm.collectionVariables.set(\"device_id\", device.device_id);",
+									"    pm.collectionVariables.set(\"house_id\", device.house_id);",
+									"    pm.collectionVariables.set(\"location_id\", device.location_id);",
+									"    console.log(\"Device ID set to: \" + device.device_id);",
+									"} else {",
+									"    console.log(\"Device 'Living Room Thermostat' not found.\");",
+									"}",
+									"pm.test(\"Device 'Living Room Thermostat' exists\", function () {",
+									"    pm.expect(device).to.not.be.undefined;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8082/api/v1/devices",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8082",
+							"path": [
+								"api",
+								"v1",
+								"devices"
+							]
+						},
+						"description": "Получает все устройства из `device-registry`. Тестовый скрипт находит устройство, созданное на предыдущем шаге, и сохраняет его `device_id` как переменную коллекции. Массив устройств — поле devices."
+					},
+					"response": []
+				},
+				{
+					"name": "2a. Получить текущее состояние устройства",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8083/api/v1/devices/{{device_id}}/state",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8083",
+							"path": [
+								"api",
+								"v1",
+								"devices",
+								"{{device_id}}",
+								"state"
+							]
+						},
+						"description": "Гарантирует инициализацию состояния устройства в Redis перед обновлением статуса."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Состояние устройства получено или инициализировано\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "3. Перевести устройство в online",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"status\": \"online\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8083/api/v1/devices/{{device_id}}/state",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8083",
+							"path": [
+								"api",
+								"v1",
+								"devices",
+								"{{device_id}}",
+								"state"
+							]
+						},
+						"description": "Обновляет статус устройства на 'online' перед отправкой команды. Это необходимо для успешного выполнения команды 'turn_on'."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Статус устройства обновлён на online\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('status', 'online');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "3. Отправить команду 'turn_on' на устройство",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"pm.collectionVariables.set(\"command_id\", jsonData.command_id);",
+									"console.log(\"Command ID set to: \" + jsonData.command_id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"command_type\": \"turn_on\",\n    \"priority\": \"high\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8083/api/v1/devices/{{device_id}}/commands",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8083",
+							"path": [
+								"api",
+								"v1",
+								"devices",
+								"{{device_id}}",
+								"commands"
+							]
+						},
+						"description": "Отправляет команду сервису `device-control` для включения устройства. Использует переменную `device_id`. Сохраняет `command_id` для последующего запроса статуса."
+					},
+					"response": []
+				},
+				{
+					"name": "3a. Проверить статус команды",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8083/api/v1/devices/{{device_id}}/commands/{{command_id}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8083",
+							"path": [
+								"api",
+								"v1",
+								"devices",
+								"{{device_id}}",
+								"commands",
+								"{{command_id}}"
+							]
+						},
+						"description": "Проверяет статус команды управления устройством по её идентификатору. Ожидается статус 'pending', 'success' или другой в зависимости от обработки."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Статус команды присутствует\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('status');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "3b. Обработать очередь команд устройства",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8083/api/v1/devices/{{device_id}}/process-queue",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8083",
+							"path": [
+								"api",
+								"v1",
+								"devices",
+								"{{device_id}}",
+								"process-queue"
+							]
+						},
+						"description": "Обрабатывает очередь команд для устройства, чтобы команда выполнилась. Используется для тестирования: переводит команду из статуса 'pending' в 'success'."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Очередь команд обработана\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('commands_processed');",
+									"    pm.expect(jsonData.commands_processed).to.be.above(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "4. Проверить, что состояние устройства 'on'",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8083/api/v1/devices/{{device_id}}/state",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8083",
+							"path": [
+								"api",
+								"v1",
+								"devices",
+								"{{device_id}}",
+								"state"
+							]
+						},
+						"description": "Проверяет состояние устройства через API `device-control`, чтобы убедиться, что команда `turn_on` была выполнена."
+					},
+					"response": []
+				},
+				{
+					"name": "5. Отправить данные телеметрии (Обогащенный запрос)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"deviceId\": \"{{device_id}}\",\n    \"houseId\": \"{{house_id}}\",\n    \"locationId\": \"{{location_id}}\",\n    \"measurementType\": \"temperature\",\n    \"value\": 22.5,\n    \"unit\": \"celsius\",\n    \"quality\": \"good\",\n    \"timestamp\": \"{{$isoTimestamp}}\",\n    \"tags\": {\n        \"sensor_model\": \"TH-02b\",\n        \"firmware_version\": \"1.4.1\"\n    },\n    \"metadata\": {\n        \"correlation_id\": \"e2e-test-{{$randomUUID}}\"\n    }\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8084/api/v1/telemetry",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8084",
+							"path": [
+								"api",
+								"v1",
+								"telemetry"
+							]
+						},
+						"description": "Отправляет образец телеметрических данных в `telemetry-service` для устройства с дополнительными полями `tags` и `metadata`."
+					},
+					"response": []
+				},
+				{
+					"name": "5a. Отправить пакет телеметрии",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"type": "text/javascript",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"deviceId\": \"{{device_id}}\",\n        \"houseId\": \"{{house_id}}\",\n        \"locationId\": \"{{location_id}}\",\n        \"measurementType\": \"humidity\",\n        \"value\": 45.8,\n        \"unit\": \"percent\",\n        \"quality\": \"good\",\n        \"timestamp\": \"{{$isoTimestamp}}\"\n    },\n    {\n        \"deviceId\": \"{{device_id}}\",\n        \"houseId\": \"{{house_id}}\",\n        \"locationId\": \"{{location_id}}\",\n        \"measurementType\": \"battery_level\",\n        \"value\": 92.0,\n        \"unit\": \"percent\",\n        \"quality\": \"good\",\n        \"timestamp\": \"{{$isoTimestamp}}\"\n    }\n]"
+						},
+						"url": {
+							"raw": "http://localhost:8084/api/v1/telemetry/batch",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8084",
+							"path": [
+								"api",
+								"v1",
+								"telemetry",
+								"batch"
+							]
+						},
+						"description": "Отправляет несколько измерений (влажность и уровень заряда батареи) в одном пакетном запросе."
+					},
+					"response": []
+				},
+				{
+					"name": "5b. Отправить еще одно показание температуры",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"deviceId\": \"{{device_id}}\",\n    \"houseId\": \"{{house_id}}\",\n    \"locationId\": \"{{location_id}}\",\n    \"measurementType\": \"temperature\",\n    \"value\": 24.8,\n    \"unit\": \"celsius\",\n    \"quality\": \"GOOD\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8084/api/v1/telemetry",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8084",
+							"path": ["api","v1","telemetry"]
+						},
+						"description": "Отправляет второе показание температуры для получения статистики."
+					},
+					"response": []
+				},
+				{
+					"name": "6. Проверить данные телеметрии",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8084/api/v1/telemetry/devices/{{device_id}}?period=1h",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8084",
+							"path": [
+								"api",
+								"v1",
+								"telemetry",
+								"devices",
+								"{{device_id}}"
+							],
+							"query": [
+								{
+									"key": "period",
+									"value": "1h"
+								}
+							]
+						},
+						"description": "Получает телеметрию для устройства за последний час, чтобы убедиться, что все данные (единичные и пакетные) были сохранены корректно."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Получен массив телеметрии не менее чем из 4 элементов\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.length).to.be.at.least(4);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "6a. Проверить статистику телеметрии",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Статистика имеет корректные поля\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('deviceId', pm.collectionVariables.get('device_id'));",
+									"    pm.expect(jsonData).to.have.property('measurementType', 'temperature');",
+									"    pm.expect(jsonData).to.have.property('count');",
+									"    pm.expect(jsonData.count).to.be.at.least(2);",
+									"    pm.expect(jsonData).to.have.property('average');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8084/api/v1/telemetry/statistics?deviceId={{device_id}}&measurementType=temperature&period=1h",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8084",
+							"path": [
+								"api",
+								"v1",
+								"telemetry",
+								"statistics"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "{{device_id}}"
+								},
+								{
+									"key": "measurementType",
+									"value": "temperature"
+								},
+								{
+									"key": "period",
+									"value": "1h"
+								}
+							]
+						},
+						"description": "Запрашивает статистику по измерениям температуры для проверки работы агрегации."
+					},
+					"response": []
+				},
+				{
+					"name": "6b. Получить sensor_id для удаления",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/v1/sensors",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["api","v1","sensors"]
+						},
+						"description": "Получает список сенсоров, находит нужный по имени и сохраняет его id для удаления."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"var sensor = jsonData.find(s => s.name === 'Living Room Thermostat');",
+									"if (sensor) {",
+									"    pm.collectionVariables.set('sensor_id', sensor.id);",
+									"    console.log('Sensor ID for deletion set to: ' + sensor.id);",
+									"} else {",
+									"    pm.collectionVariables.unset('sensor_id');",
+									"    console.log('Sensor not found for deletion.');",
+									"}",
+									"pm.test('Sensor найден для удаления', function () {",
+									"    pm.expect(sensor).to.not.be.undefined;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "7. Удалить сенсор (Инициирует удаление устройства)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/v1/sensors/{{sensor_id}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"sensors",
+								"{{sensor_id}}"
+							]
+						},
+						"description": "Удаляет исходный сенсор из монолита, что должно инициировать событие `sensor.deleted` и заставить `device-registry` удалить соответствующее устройство."
+					},
+					"response": []
+				},
+				{
+					"name": "8. Проверить, что устройство удалено",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Устройство удалено (404 Not Found)\", function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8082/api/v1/devices/{{device_id}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8082",
+							"path": [
+								"api",
+								"v1",
+								"devices",
+								"{{device_id}}"
+							]
+						},
+						"description": "Попытка получить устройство из `device-registry`. Ожидается, что этот запрос завершится ошибкой 404 Not Found, подтверждая, что устройство было удалено."
+					},
+					"response": []
+				},
+				{
+					"name": "9. Проверить каскадное удаление: состояние устройства в device-control",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Состояние устройства удалено (404 Not Found)\", function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8083/api/v1/devices/{{device_id}}/state",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8083",
+							"path": [
+								"api",
+								"v1",
+								"devices",
+								"{{device_id}}",
+								"state"
+							]
+						},
+						"description": "Проверяет, что состояние устройства было удалено из Redis в device-control сервисе после каскадного удаления."
+					},
+					"response": []
+				},
+				{
+					"name": "10. Проверить каскадное удаление: команды устройства в device-control",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Команды устройства удалены (пустой массив или 404)\", function () {",
+									"    if (pm.response.code === 404) {",
+									"        pm.expect(pm.response.code).to.eql(404);",
+									"    } else if (pm.response.code === 200) {",
+									"        var jsonData = pm.response.json();",
+									"        pm.expect(jsonData).to.be.an('array').that.is.empty;",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8083/api/v1/devices/{{device_id}}/commands",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8083",
+							"path": [
+								"api",
+								"v1",
+								"devices",
+								"{{device_id}}",
+								"commands"
+							]
+						},
+						"description": "Проверяет, что все команды устройства были удалены из Redis в device-control сервисе после каскадного удаления."
+					},
+					"response": []
+				},
+				{
+					"name": "11. Проверить каскадное удаление: телеметрия в telemetry-service",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Телеметрия устройства удалена (пустой массив или 404)\", function () {",
+									"    if (pm.response.code === 404) {",
+									"        pm.expect(pm.response.code).to.eql(404);",
+									"    } else if (pm.response.code === 200) {",
+									"        var jsonData = pm.response.json();",
+									"        pm.expect(jsonData).to.be.an('array').that.is.empty;",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8084/api/v1/telemetry/devices/{{device_id}}?period=24h",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8084",
+							"path": [
+								"api",
+								"v1",
+								"telemetry",
+								"devices",
+								"{{device_id}}"
+							],
+							"query": [
+								{
+									"key": "period",
+									"value": "24h"
+								}
+							]
+						},
+						"description": "Проверяет, что вся телеметрия устройства была удалена из InfluxDB в telemetry-service после каскадного удаления."
+					},
+					"response": []
+				},
+				{
+					"name": "12. Проверить каскадное удаление: статистика телеметрии",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Статистика телеметрии недоступна (404 или пустые данные)\", function () {",
+									"    if (pm.response.code === 404) {",
+									"        pm.expect(pm.response.code).to.eql(404);",
+									"    } else if (pm.response.code === 200) {",
+									"        var jsonData = pm.response.json();",
+									"        pm.expect(jsonData.count || 0).to.eql(0);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8084/api/v1/telemetry/statistics?deviceId={{device_id}}&measurementType=temperature&period=24h",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8084",
+							"path": [
+								"api",
+								"v1",
+								"telemetry",
+								"statistics"
+							],
+							"query": [
+								{
+									"key": "deviceId",
+									"value": "{{device_id}}"
+								},
+								{
+									"key": "measurementType",
+									"value": "temperature"
+								},
+								{
+									"key": "period",
+									"value": "24h"
+								}
+							]
+						},
+						"description": "Проверяет, что статистика телеметрии больше не доступна для удаленного устройства."
+					},
+					"response": []
+				}
+			],
+			"description": "Последовательность запросов для тестирования полного жизненного цикла устройства, от создания на основе события до удаления."
+		},
+		{
+			"name": "E2E: Прямое тестирование микросервисов",
+			"item": [
+				{
+					"name": "1. Health Check - Все сервисы",
+					"item": [
+						{
+							"name": "Device Registry Health",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "http://localhost:8082/health"
+							}
+						},
+						{
+							"name": "Device Control Health", 
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "http://localhost:8083/api/v1/health"
+							}
+						},
+						{
+							"name": "Telemetry Service Health",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "http://localhost:8084/health"
+							}
+						},
+						{
+							"name": "Temperature API Health",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "http://localhost:8081/health"
+							}
+						}
+					]
+				},
+				{
+					"name": "2. Temperature API - Внешний источник данных",
+					"item": [
+						{
+							"name": "Получить температуру по местоположению",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "http://localhost:8081/temperature?location=Living Room",
+									"protocol": "http",
+									"host": ["localhost"],
+									"port": "8081",
+									"path": ["temperature"],
+									"query": [{"key": "location", "value": "Living Room"}]
+								}
+							}
+						},
+						{
+							"name": "Получить температуру по sensor ID",
+							"request": {
+								"method": "GET", 
+								"header": [],
+								"url": "http://localhost:8081/temperature/1"
+							}
+						}
+					]
+				},
+				{
+					"name": "3. Получить доступные типы устройств",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"// Найти Temperature Sensor",
+									"var tempSensor = jsonData.device_types.find(t => t.type_name === 'Temperature Sensor');",
+									"if (tempSensor) {",
+									"    pm.collectionVariables.set('temp_sensor_type_id', tempSensor.type_id);",
+									"    console.log('Temperature Sensor type_id: ' + tempSensor.type_id);",
+									"} else {",
+									"    // Если не найден, используем первый доступный",
+									"    pm.collectionVariables.set('temp_sensor_type_id', jsonData.device_types[0].type_id);",
+									"    console.log('Using first available type_id: ' + jsonData.device_types[0].type_id);",
+									"}",
+									"pm.test('Device types получены', function () {",
+									"    pm.expect(jsonData.device_types).to.be.an('array');",
+									"    pm.expect(jsonData.device_types.length).to.be.greaterThan(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "http://localhost:8082/api/v1/device-types",
+						"description": "Получает список доступных типов устройств для прямого создания"
+					}
+				},
+				{
+					"name": "4. Прямое создание устройства",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"pm.collectionVariables.set('direct_device_id', jsonData.device_id);",
+									"pm.collectionVariables.set('direct_house_id', jsonData.house_id);",
+									"pm.collectionVariables.set('direct_location_id', jsonData.location_id);",
+									"console.log('Direct device created with ID: ' + jsonData.device_id);",
+									"pm.test('Device создан успешно', function () {",
+									"    pm.expect(jsonData).to.have.property('device_id');",
+									"    pm.expect(jsonData.device_id).to.be.a('string');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"type_id\": \"{{temp_sensor_type_id}}\",\n    \"house_id\": \"550e8400-e29b-41d4-a716-446655440001\",\n    \"location_id\": \"550e8400-e29b-41d4-a716-446655440002\",\n    \"device_name\": \"Direct Test Device\",\n    \"serial_number\": \"DIR-001\",\n    \"firmware_version\": \"1.0.0\"\n}"
+						},
+						"url": "http://localhost:8082/api/v1/devices",
+						"description": "Прямое создание устройства в device-registry без монолита"
+					}
+				},
+				{
+					"name": "5. Добавить телеметрию для прямого устройства",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"deviceId\": \"{{direct_device_id}}\",\n    \"houseId\": \"{{direct_house_id}}\",\n    \"locationId\": \"{{direct_location_id}}\",\n    \"measurementType\": \"temperature\",\n    \"value\": 26.5,\n    \"unit\": \"celsius\",\n    \"quality\": \"GOOD\"\n}"
+						},
+						"url": "http://localhost:8084/api/v1/telemetry",
+						"description": "Добавляет телеметрию для прямого устройства перед удалением"
+					}
+				},
+				{
+					"name": "6. Прямое удаление устройства с событиями",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": "http://localhost:8082/api/v1/devices/{{direct_device_id}}",
+						"description": "Прямое удаление устройства для тестирования event-driven cleanup"
+					}
+				},
+				{
+					"name": "7. Проверка каскадного удаления",
+					"item": [
+						{
+							"name": "Проверить удаление из device-control",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Device state удалено\", function () {",
+											"    pm.expect(pm.response.json()).to.have.property('detail', 'Device not found');",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "http://localhost:8083/api/v1/devices/{{direct_device_id}}/state"
+							}
+						},
+						{
+							"name": "Проверить удаление из telemetry",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Telemetry данные удалены\", function () {",
+											"    var jsonData = pm.response.json();",
+											"    pm.expect(jsonData).to.be.an('array').that.is.empty;",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "http://localhost:8084/api/v1/telemetry/devices/{{direct_device_id}}?period=1h"
+							}
+						}
+					]
+				}
+			],
+			"description": "Тестирование микросервисов без зависимости от монолита"
+		}
+	],
+	"event": [],
+	"variable": [
+		{
+			"key": "sensor_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "device_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "house_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "location_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "direct_device_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "direct_house_id", 
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "direct_location_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "command_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "temp_sensor_type_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+} 

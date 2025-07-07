@@ -1,0 +1,369 @@
+asyncapi: 3.0.0
+info:
+  title: Smart Home AsyncAPI
+  version: 1.0.0
+  description: |
+    Asynchronous communication for Smart Home system.
+    **Task requirement**: "AsyncAPI for asynchronous communication"
+    
+    Communication patterns:
+    - RabbitMQ: Inter-service events and integration (IMPLEMENTED)
+    - MQTT: IoT devices ↔ services (PLANNED)
+  contact:
+    name: Smart Home Team
+    email: dev@warmhouse.com
+
+servers:
+  rabbitmq:
+    host: localhost:5672
+    protocol: amqp
+    description: RabbitMQ for inter-service messaging (основной канал коммуникации)
+    security:
+      - user: []
+  
+  mqttBroker:
+    host: localhost:1883
+    protocol: mqtt
+    description: MQTT broker for IoT device communication (планируется в будущих версиях)
+
+defaultContentType: application/json
+
+channels:
+  # RabbitMQ Channels - РЕАЛИЗОВАННЫЕ события
+  sensorEvents:
+    address: 'events.sensor'
+    messages:
+      sensorCreated:
+        $ref: '#/components/messages/SensorCreatedEvent'
+      sensorDeleted:
+        $ref: '#/components/messages/SensorDeletedEvent'
+    description: Sensor lifecycle events from legacy monolith
+
+  deviceEvents:
+    address: 'events.device'
+    messages:
+      deviceRegistered:
+        $ref: '#/components/messages/DeviceRegisteredEvent'
+      deviceDeleted:
+        $ref: '#/components/messages/DeviceDeletedEvent'
+    description: Device lifecycle events from device-registry
+
+  deviceControlCleanup:
+    address: 'device_control_cleanup_queue'
+    messages:
+      deviceDeleted:
+        $ref: '#/components/messages/DeviceDeletedEvent'
+    description: Device cleanup queue for device-control service
+
+  telemetryCleanup:
+    address: 'telemetry-service.device-events'
+    messages:
+      deviceDeleted:
+        $ref: '#/components/messages/DeviceDeletedEvent'
+    description: Device cleanup queue for telemetry service
+
+  # MQTT Channels - ПЛАНИРУЕМЫЕ (не реализованы)
+  deviceTelemetry:
+    address: 'home/{house_id}/devices/{device_id}/telemetry'
+    messages:
+      telemetryMessage:
+        $ref: '#/components/messages/TelemetryMessage'
+    description: Device telemetry data from sensors (MQTT - planned)
+    parameters:
+      house_id:
+        description: House identifier
+        location: $message.payload#/house_id
+      device_id:
+        description: Device identifier  
+        location: $message.payload#/device_id
+
+  deviceCommands:
+    address: 'home/{house_id}/devices/{device_id}/commands'
+    messages:
+      commandMessage:
+        $ref: '#/components/messages/DeviceCommandMessage'
+    description: Commands sent to devices (MQTT - planned)
+    parameters:
+      house_id:
+        description: House identifier
+        location: $message.payload#/house_id
+      device_id:
+        description: Device identifier
+        location: $message.payload#/device_id
+
+operations:
+  # RabbitMQ Operations - РЕАЛИЗОВАНЫ
+  publishSensorEvent:
+    action: send
+    channel:
+      $ref: '#/channels/sensorEvents'
+    summary: Publish sensor lifecycle events
+    description: Legacy monolith publishes sensor events (sensor.created, sensor.deleted)
+
+  subscribeSensorEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/sensorEvents'
+    summary: Subscribe to sensor events
+    description: Device Registry subscribes to sensor events for device management
+
+  publishDeviceEvent:
+    action: send
+    channel:
+      $ref: '#/channels/deviceEvents'
+    summary: Publish device events
+    description: Device Registry publishes device lifecycle events (device.deleted)
+
+  subscribeDeviceControlCleanup:
+    action: receive
+    channel:
+      $ref: '#/channels/deviceControlCleanup'
+    summary: Device Control cleanup subscription
+    description: Device Control Service subscribes to device.deleted events
+
+  subscribeTelemetryCleanup:
+    action: receive
+    channel:
+      $ref: '#/channels/telemetryCleanup'
+    summary: Telemetry Service cleanup subscription
+    description: Telemetry Service subscribes to device events for cleanup
+
+  # MQTT Operations - ПЛАНИРУЕМЫЕ
+  receiveTelemetry:
+    action: receive
+    channel:
+      $ref: '#/channels/deviceTelemetry'
+    summary: Receive telemetry data from devices (PLANNED)
+    description: Telemetry Service receives sensor measurements from IoT devices
+
+  sendCommand:
+    action: send
+    channel:
+      $ref: '#/channels/deviceCommands'
+    summary: Send commands to devices (PLANNED)
+    description: Device Control Service sends commands to IoT devices
+
+components:
+  securitySchemes:
+    user:
+      type: userPassword
+      description: RabbitMQ user credentials
+
+  messages:
+    SensorCreatedEvent:
+      name: SensorCreatedEvent
+      title: Sensor Created in Legacy Monolith
+      summary: New sensor created in legacy system, triggers device registration
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - event_type
+          - sensor_id
+          - name
+          - type
+          - location
+          - timestamp
+        properties:
+          event_type:
+            type: string
+            const: "sensor.created"
+          sensor_id:
+            type: integer
+            description: Sensor ID from legacy system
+          name:
+            type: string
+            description: Sensor name
+          type:
+            type: string
+            description: Sensor type (temperature, humidity, etc.)
+          location:
+            type: string
+            description: Sensor location
+          timestamp:
+            type: string
+            format: date-time
+      examples:
+        - name: temperatureSensorCreated
+          summary: Temperature sensor created in living room
+          payload:
+            event_type: "sensor.created"
+            sensor_id: 123
+            name: "Living Room Temperature"
+            type: "temperature"
+            location: "Living Room"
+            timestamp: "2024-12-20T15:30:00.000Z"
+
+    SensorDeletedEvent:
+      name: SensorDeletedEvent
+      title: Sensor Deleted in Legacy Monolith
+      summary: Sensor deleted in legacy system, triggers device cleanup
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - event_type
+          - sensor_id
+          - timestamp
+        properties:
+          event_type:
+            type: string
+            const: "sensor.deleted"
+          sensor_id:
+            type: integer
+            description: Sensor ID from legacy system
+          timestamp:
+            type: string
+            format: date-time
+
+    DeviceRegisteredEvent:
+      name: DeviceRegisteredEvent
+      title: Device Registered
+      summary: New device registered in device-registry
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - event_type
+          - device_id
+          - house_id
+          - timestamp
+        properties:
+          event_type:
+            type: string
+            const: "device.registered"
+          device_id:
+            type: string
+            format: uuid
+          house_id:
+            type: string
+            format: uuid
+          location_id:
+            type: string
+            format: uuid
+          device_type:
+            type: string
+          device_name:
+            type: string
+          timestamp:
+            type: string
+            format: date-time
+
+    DeviceDeletedEvent:
+      name: DeviceDeletedEvent
+      title: Device Deleted - Cleanup Event
+      summary: Device deleted from device-registry, triggers cascading cleanup
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - event_type
+          - device_id
+          - house_id
+          - timestamp
+        properties:
+          event_type:
+            type: string
+            const: "device.deleted"
+          device_id:
+            type: string
+            format: uuid
+          house_id:
+            type: string
+            format: uuid
+          location_id:
+            type: string
+            format: uuid
+          device_name:
+            type: string
+          device_type:
+            type: string
+          timestamp:
+            type: string
+            format: date-time
+      examples:
+        - name: deviceDeleted
+          summary: Temperature sensor device deleted
+          payload:
+            event_type: "device.deleted"
+            device_id: "550e8400-e29b-41d4-a716-446655440001"
+            house_id: "550e8400-e29b-41d4-a716-446655440020"
+            location_id: "550e8400-e29b-41d4-a716-446655440030"
+            device_name: "Living Room Temperature"
+            device_type: "temperature_sensor"
+            timestamp: "2024-12-20T15:30:00.000Z"
+
+    # ПЛАНИРУЕМЫЕ события (MQTT)
+    TelemetryMessage:
+      name: TelemetryMessage
+      title: Device Telemetry Data (PLANNED)
+      summary: Sensor measurement data from IoT devices
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - device_id
+          - house_id
+          - location_id
+          - timestamp
+          - measurements
+        properties:
+          device_id:
+            type: string
+            format: uuid
+          house_id:
+            type: string
+            format: uuid
+          location_id:
+            type: string
+            format: uuid
+          timestamp:
+            type: string
+            format: date-time
+          measurements:
+            type: object
+            description: Key-value pairs of sensor measurements
+            additionalProperties:
+              type: number
+          quality:
+            type: string
+            enum: [good, fair, poor, error]
+            default: good
+
+    DeviceCommandMessage:
+      name: DeviceCommandMessage
+      title: Device Command (PLANNED)
+      summary: Commands sent to IoT devices
+      contentType: application/json
+      payload:
+        type: object
+        required:
+          - command_id
+          - device_id
+          - command
+          - timestamp
+        properties:
+          command_id:
+            type: string
+            format: uuid
+          device_id:
+            type: string
+            format: uuid
+          command:
+            type: string
+            description: Command name
+          parameters:
+            type: object
+            description: Command parameters
+          priority:
+            type: string
+            enum: [low, normal, high, urgent]
+            default: normal
+          timeout:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 30
+          timestamp:
+            type: string
+            format: date-time

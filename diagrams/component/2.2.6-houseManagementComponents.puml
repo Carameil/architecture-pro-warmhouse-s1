@@ -1,0 +1,70 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Component Diagram - House Management Service (Property Context - Simplified Caching)
+
+Container(apiGateway, "API Gateway", "Kong/NGINX", "Routes requests to microservices")
+Container(userManagement, "User Management Service", "Java Spring Boot", "User ownership validation")
+Container(deviceRegistry, "Device Registry Service", "Go", "Initial data consumer")
+Container(deviceControl, "Device Control Service", "Go", "Initial data consumer")
+Container(telemetryService, "Telemetry Service", "Go", "Initial data consumer")
+Container(scenarioService, "Scenario Service", "Java Spring Boot", "Initial data consumer")
+
+Container_Boundary(houseManagement, "House Management Service") {
+    Component(houseApi, "House API", "Spring Boot", "REST API for house management\n- House CRUD operations\n- Location management\n- Access control\n- Property configuration")
+    
+    Component(propertyManager, "Property Manager", "Java", "House and property management\n- House lifecycle management\n- Property validation\n- Configuration management\n- Ownership verification")
+    
+    Component(locationManager, "Location Manager", "Java", "Location and room management\n- Room hierarchy\n- Zone organization\n- Location validation\n- Spatial relationships")
+    
+    Component(accessManager, "Access Manager", "Java", "Access control and permissions\n- User access management\n- Permission validation\n- Sharing logic\n- Access hierarchy")
+    
+    Component(dataCacheManager, "Data Cache Manager", "Java", "Shared cache management\n- House data caching\n- Location hierarchy cache\n- Simple cache operations\n- Hot data management")
+    
+    Component(houseEventPublisher, "Event Publisher", "Java", "CRITICAL: Event source for other services\n- House creation/update events\n- Location change events\n- Access permission events\n- Property update events")
+}
+
+ContainerDb(houseDb, "House Management DB", "PostgreSQL", "Houses, rooms, locations, property configurations")
+ContainerDb(sharedCache, "Shared Cache", "Redis", "Sessions, permissions, frequently accessed data")
+Container(messageBroker, "Message Broker", "RabbitMQ", "Event streaming - distributes house/location updates")
+
+' External interactions
+Rel(apiGateway, houseApi, "Manages houses and locations", "HTTPS/REST")
+Rel(houseApi, userManagement, "Validates user ownership", "HTTP/REST")
+
+' Initial data requests from other services (startup only)
+Rel(deviceRegistry, houseApi, "Initial house/location data", "HTTP/REST", $tags="startup")
+Rel(deviceControl, houseApi, "Initial access rights data", "HTTP/REST", $tags="startup") 
+Rel(telemetryService, houseApi, "Initial location mappings", "HTTP/REST", $tags="startup")
+Rel(scenarioService, houseApi, "Initial house access data", "HTTP/REST", $tags="startup")
+
+' Internal component interactions
+Rel(houseApi, propertyManager, "Manages house properties", "Java interfaces")
+Rel(houseApi, locationManager, "Manages locations", "Java interfaces")
+Rel(houseApi, accessManager, "Manages access", "Java interfaces")
+Rel(houseApi, dataCacheManager, "Gets cached data", "Java interfaces")
+Rel(propertyManager, accessManager, "Validates ownership", "Java interfaces")
+Rel(locationManager, propertyManager, "Validates house context", "Java interfaces")
+Rel(propertyManager, dataCacheManager, "Updates cache", "Java interfaces")
+Rel(locationManager, dataCacheManager, "Updates cache", "Java interfaces")
+Rel(accessManager, dataCacheManager, "Updates cache", "Java interfaces")
+
+' CRITICAL: All changes trigger events
+Rel(propertyManager, houseEventPublisher, "Publishes ALL house changes", "Java interfaces")
+Rel(locationManager, houseEventPublisher, "Publishes ALL location changes", "Java interfaces")
+Rel(accessManager, houseEventPublisher, "Publishes ALL access changes", "Java interfaces")
+
+' Data storage
+Rel(propertyManager, houseDb, "Stores house data", "SQL/JPA")
+Rel(locationManager, houseDb, "Stores location data", "SQL/JPA")
+Rel(accessManager, houseDb, "Stores access data", "SQL/JPA")
+
+' Simplified cache storage
+Rel(dataCacheManager, sharedCache, "Reads/writes cached data", "Redis Protocol")
+
+' Event publishing - Critical for system resilience
+Rel(houseEventPublisher, messageBroker, "Publishes ALL house/location/access events", "AMQP")
+
+@enduml 

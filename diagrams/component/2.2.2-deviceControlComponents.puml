@@ -1,0 +1,70 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 Component Diagram - Device Control Service (Control Context - Simplified Caching)
+
+Container(apiGateway, "API Gateway", "Kong/NGINX", "Routes requests to microservices")
+Container(deviceRegistry, "Device Registry Service", "Go", "Device catalog and metadata")
+Container(userManagement, "User Management Service", "Java Spring Boot", "User authentication (startup sync only)")
+Container(houseManagement, "House Management Service", "Java Spring Boot", "Location management (startup sync only)")
+
+System_Ext(smartDevices, "Smart Devices", "IoT devices: lights, gates, cameras, sensors")
+
+Container_Boundary(deviceControl, "Device Control Service") {
+    Component(controlApi, "Control API", "Gin Framework", "REST API for device control\n- Device command endpoints\n- Device state queries\n- Real-time control interface\n- Batch operations")
+    
+    Component(commandHandler, "Command Handler", "Go", "Command processing and validation\n- Command validation\n- Command queuing\n- Command retry logic\n- Command result processing")
+    
+    Component(stateManager, "Device State Manager", "Go", "Device state management\n- State synchronization\n- State caching\n- State history\n- Conflict resolution")
+    
+    Component(accessCacheManager, "Access Cache Manager", "Go", "Shared cache for permissions\n- User permissions lookup\n- Location access validation\n- Simple cache operations\n- Fallback to API calls")
+    
+    Component(realtimeController, "Real-time Controller", "Go", "Real-time device communication\n- MQTT communication\n- Protocol adapters\n- Connection management\n- Message routing")
+    
+    Component(controlEventPublisher, "Event Publisher", "Go", "Event publishing to message broker\n- Device state change events\n- Command execution events\n- Control failure events\n- Device connection events")
+    
+    Component(eventSubscriber, "Event Subscriber", "Go", "Event subscription and processing\n- Permission update events\n- Location access events\n- Cache invalidation\n- Event filtering")
+}
+
+ContainerDb(deviceControlCache, "Device Control Cache", "Redis", "Device states, command queue, real-time control data")
+ContainerDb(sharedCache, "Shared Cache", "Redis", "Sessions, permissions, frequently accessed data")
+Container(messageBroker, "Message Broker", "RabbitMQ", "Event streaming and cache updates")
+
+' External interactions
+Rel(apiGateway, controlApi, "Controls devices", "HTTPS/REST")
+Rel(controlApi, deviceRegistry, "Validates device existence", "HTTP/REST")
+
+' Startup sync only
+Rel(controlApi, userManagement, "Initial permissions load", "HTTP/REST", $tags="startup")
+Rel(controlApi, houseManagement, "Initial access rights load", "HTTP/REST", $tags="startup")
+
+' Internal component interactions
+Rel(controlApi, commandHandler, "Processes commands", "Go interfaces")
+Rel(controlApi, stateManager, "Manages device state", "Go interfaces")
+Rel(commandHandler, stateManager, "Updates state", "Go interfaces")
+Rel(commandHandler, realtimeController, "Sends commands", "Go interfaces")
+Rel(commandHandler, accessCacheManager, "Validates permissions", "Go interfaces")
+Rel(stateManager, realtimeController, "Syncs state", "Go interfaces")
+Rel(stateManager, accessCacheManager, "Validates access", "Go interfaces")
+Rel(commandHandler, controlEventPublisher, "Publishes command events", "Go interfaces")
+Rel(stateManager, controlEventPublisher, "Publishes state events", "Go interfaces")
+
+' Cache storage (Split responsibilities)
+Rel(stateManager, deviceControlCache, "Caches device states", "Redis Protocol")
+Rel(commandHandler, deviceControlCache, "Stores command queue", "Redis Protocol")
+Rel(accessCacheManager, sharedCache, "Reads permission cache", "Redis Protocol")
+
+' Device communication
+Rel(realtimeController, smartDevices, "Sends commands", "MQTT/HTTP")
+Rel(smartDevices, realtimeController, "Reports status", "MQTT/HTTP")
+
+' Event publishing
+Rel(controlEventPublisher, messageBroker, "Publishes control events", "AMQP")
+
+' Event subscription for cache updates
+Rel(messageBroker, eventSubscriber, "Receives permission/access events", "AMQP")
+Rel(eventSubscriber, accessCacheManager, "Invalidates/updates cache", "Go interfaces")
+
+@enduml 

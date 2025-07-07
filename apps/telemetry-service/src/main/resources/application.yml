@@ -1,0 +1,67 @@
+# Telemetry Service Configuration
+spring:
+  application:
+    name: telemetry-service
+  
+  # Redis Configuration (Shared Cache)
+  redis:
+    host: ${REDIS_SHARED_HOST:localhost}
+    port: ${REDIS_SHARED_PORT:6380}
+    password: ${REDIS_SHARED_PASSWORD:redis123}
+    timeout: 2000
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+  
+  # RabbitMQ Configuration
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:admin}
+    password: ${RABBITMQ_PASSWORD:admin123}
+    virtual-host: /
+    
+# Server Configuration
+server:
+  port: ${TELEMETRY_PORT:8084}
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# InfluxDB Configuration
+influxdb:
+  url: ${INFLUXDB_URL:http://localhost:8086}
+  token: ${INFLUXDB_TOKEN:my-super-secret-auth-token}
+  org: ${INFLUXDB_ORG:warmhouse}
+  bucket: ${INFLUXDB_BUCKET:telemetry}
+  retention: ${INFLUXDB_RETENTION:30d}
+
+# Device Registry Service Configuration
+device-registry:
+  url: ${DEVICE_REGISTRY_URL:http://localhost:8082}
+  timeout: 5000
+
+# Management endpoints (health checks)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+      base-path: /
+  endpoint:
+    health:
+      show-details: always
+
+# Logging
+logging:
+  level:
+    com.warmhouse.telemetry: ${LOG_LEVEL:DEBUG}
+    org.springframework.web: INFO
+    org.springframework.data.redis: DEBUG
+    org.springframework.amqp: DEBUG
+    org.springframework.rabbit: DEBUG
+    org.springframework.context: DEBUG
+    com.influxdb: DEBUG
+    root: ${ROOT_LOG_LEVEL:INFO} 

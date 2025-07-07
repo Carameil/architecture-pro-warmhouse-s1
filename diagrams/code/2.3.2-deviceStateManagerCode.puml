@@ -1,0 +1,138 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C4 Code Diagram - Device State Manager (Device Control Service / Go - CRITICAL)
+
+class DeviceStateManager {
+    -cache: RedisCache
+    -repository: StateRepository
+    -eventPublisher: EventPublisher
+    -locationValidator: LocationValidator
+    +getCurrentState(deviceId: string): DeviceState
+    +updateState(deviceId: string, newState: DeviceState): boolean
+    +syncWithDevice(deviceId: string): void
+    +validateStateChange(current: DeviceState, target: DeviceState): boolean
+    +validateLocationAccess(deviceId: string, userId: string): boolean
+}
+
+class DeviceState {
+    -deviceId: string
+    -properties: Map<string, string>
+    -timestamp: datetime
+    -version: int
+    -source: StateSource
+    -locationId: string
+    -houseId: string
+    +clone(): DeviceState
+    +isValid(): boolean
+    +getProperty(key: string): string
+    +setProperty(key: string, value: string): void
+    +validateLocation(): boolean
+}
+
+class RedisCache {
+    -redisClient: RedisClient
+    -ttl: int
+    +get(deviceId: string): DeviceState
+    +set(deviceId: string, state: DeviceState): void
+    +exists(deviceId: string): boolean
+    +invalidate(deviceId: string): void
+    +cacheLocationInfo(deviceId: string, locationId: string): void
+}
+
+class StateRepository {
+    -dbConnection: DatabaseConnection
+    +findById(deviceId: string): DeviceState
+    +save(state: DeviceState): void
+    +getHistory(deviceId: string, hours: int): List<DeviceState>
+    +updateLocation(deviceId: string, locationId: string): void
+}
+
+class EventPublisher {
+    -mqttClient: MqttClient
+    +publishStateChange(deviceId: string, oldState: DeviceState, newState: DeviceState): void
+    +publishError(deviceId: string, error: string): void
+    +publishLocationValidationError(deviceId: string, userId: string): void
+}
+
+class CommandHandler {
+    -stateManager: DeviceStateManager
+    -deviceConnector: DeviceConnector
+    -locationValidator: LocationValidator
+    +executeCommand(deviceId: string, command: DeviceCommand): boolean
+    +validateCommand(command: DeviceCommand): boolean
+    +validateCommandLocation(command: DeviceCommand): boolean
+}
+
+class DeviceCommand {
+    -deviceId: string
+    -action: string
+    -parameters: Map<string, string>
+    -userId: string
+    -timestamp: datetime
+    -requestedLocationId: string
+    +validate(): boolean
+    +validateUserAccess(): boolean
+}
+
+class DeviceConnector {
+    -mqttClient: MqttClient
+    +sendCommand(deviceId: string, command: string): boolean
+    +getDeviceStatus(deviceId: string): DeviceState
+    +isDeviceOnline(deviceId: string): boolean
+    +validateDeviceLocation(deviceId: string): boolean
+}
+
+class LocationValidator {
+    -houseManagementService: HouseManagementService
+    +validateUserDeviceAccess(userId: string, deviceId: string): boolean
+    +validateLocationAccess(userId: string, locationId: string): boolean
+    +getDeviceLocation(deviceId: string): LocationInfo
+    +validateLocationChange(deviceId: string, newLocationId: string): boolean
+}
+
+class HouseManagementService {
+    +validateUserLocationAccess(userId: string, locationId: string): boolean
+    +getDeviceLocation(deviceId: string): LocationInfo
+    +validateLocationChange(deviceId: string, locationId: string): boolean
+}
+
+class LocationInfo {
+    -locationId: string
+    -houseId: string
+    -name: string
+    -type: string
+}
+
+enum StateSource {
+    DEVICE
+    CACHE
+    DATABASE
+    USER_COMMAND
+    LOCATION_SYNC
+}
+
+' Relationships
+DeviceStateManager ||--|| RedisCache
+DeviceStateManager ||--|| StateRepository
+DeviceStateManager ||--|| EventPublisher
+DeviceStateManager ||--|| LocationValidator
+DeviceStateManager ||--o{ DeviceState
+
+CommandHandler ||--|| DeviceStateManager
+CommandHandler ||--|| DeviceConnector
+CommandHandler ||--|| DeviceCommand
+CommandHandler ||--|| LocationValidator
+
+DeviceConnector ||--|| DeviceState
+
+LocationValidator ||--|| HouseManagementService
+LocationValidator ||--|| LocationInfo
+
+note right of DeviceStateManager : "State management with validation:\n- Redis caching\n- Database synchronization\n- Change validation\n- Location access validation\n- Event publishing"
+
+note bottom of LocationValidator : "Location validation:\n- Access validation\n- Location verification\n- House Service integration\n- Location caching"
+
+note left of CommandHandler : "Command handling with validation:\n- Command validation\n- Access verification\n- Location validation\n- MQTT execution"
+
+@enduml 
